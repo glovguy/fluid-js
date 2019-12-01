@@ -18,7 +18,7 @@
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-  const pixelSize = 4;
+  const pixelSize = 20;
   let dt = 0.002;
   const visc = 800;
   const arrWidth = Math.floor(canvas.width / pixelSize);
@@ -84,30 +84,14 @@
   }
 
   function drawCanvas() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'lightgrey';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
+    ctx.strokeRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
     ctx.strokeStyle = "grey";
-    for (let i=1; i<arrWidth+1; i++) {
-      ctx.beginPath();
-      ctx.moveTo(i*pixelSize, 0);
-      ctx.lineTo(i*pixelSize, canvas.height);
-      ctx.stroke();
-    }
-    for (let j=1; j<arrHeight+1; j++) {
-      ctx.beginPath();
-      ctx.moveTo(0, j*pixelSize);
-      ctx.lineTo(canvas.width, j*pixelSize);
-      ctx.stroke();
-    }
   }
 
   function drawCanvasArrow(fromX, fromY, toX, toY) {
-    ctx.strokeStyle = "darkgrey";
-    // var headLength = 10;
-    // var dx = toX - fromX;
-    // var dy = toY - fromY;
+    ctx.strokeStyle = "black";
     ctx.beginPath();
     ctx.moveTo(fromX, fromY);
     ctx.lineTo(toX, toY);
@@ -132,30 +116,40 @@
   }
 
   const displayCircles = false;
+  const blurOffsetY = canvas.height + 1000;
 
   const skipDrawOptimize = false;
   const skipDrawRate = 3;
 
   const denDiffOptimize = false;
-  const denDiffReq = 0.09;
+  const denDiffReq = 0.01;
   const denDiffPrev = initMatrix(arrWidth, arrHeight, () => 0);
-  const refreshAnywayRate = 2;
+  const refreshAnywayRate = 23;
 
   function drawDensityCircles() {
     ctx.strokeStyle = "black";
+    if (displayCircles) {
+      ctx.shadowOffsetY = blurOffsetY;
+      ctx.shadowBlur = pixelSize; // (default 0)
+      ctx.shadowColor = 'rgba(0,0,0,1)'; // (default transparent black)
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(0,0,0,1)'; // transparent black, aka the default pixel state of a canvas
+    }
     for (let i=0; i<arrWidth; i++) {
       for (let j=0; j<arrHeight; j++) {
         const skipNum = (i+(j*arrWidth)+(cycleCount*7));
         if (skipDrawOptimize && skipNum%skipDrawRate === 0) { continue; }
-        if (denDiffOptimize && cycleCount%refreshAnywayRate === 0 && denState[i][j]-denDiffPrev[i][j] < denDiffReq) {
-          continue;
-        }
+        if (denDiffOptimize && skipNum%refreshAnywayRate != 0 && denState[i][j]-denDiffPrev[i][j] < denDiffReq) { continue; }
         denDiffPrev[i][j] = denState[i][j];
         const denX = (i+1)*pixelSize-pixelSize/2.0;
         const denY = (j+1)*pixelSize-pixelSize/2.0;
         const denSize = denState[i][j]*10 / denVelRatio;
-        displayCircles ? canvasCircle(denX, denY, denSize) : canvasShadedSquare(denX, denY, denSize);
+        displayCircles ? canvasGradient(denX, denY, denSize) : canvasShadedSquare(denX, denY, denSize);
       }
+    }
+    if (displayCircles) {
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
@@ -176,11 +170,16 @@
     ctx.fillRect(x-pixelSize/2.0, y-pixelSize/2.0, pixelSize*2, pixelSize*2);
   }
 
+  function canvasGradient(x, y, radius) {
+    ctx.moveTo(x, y);
+    ctx.arc(x, y-blurOffsetY, radius*2.0*pixelSize/20.0, 0, Math.PI * 2, true );
+  }
+
   function diffuse(b, x, x0, visc, dt) {
     const a=dt*visc;
     for (let k=0; k<20; k++ ) {
-      for (let i=1; i<=arrWidth-2; i++ ) {
-        for (let j=1; j<=arrHeight-2; j++ ) {
+      for (let i=1; i<=Nx; i++ ) {
+        for (let j=1; j<=Ny; j++ ) {
           x[i][j] = (
             x0[i][j] +
             a*(
@@ -192,23 +191,23 @@
           )/(1+4*a);
         }
       }
-      set_bnd ( b, x );
+      set_bnd(b, x);
     }
   }
 
   function advect(b, d, d0, u, v, dt) {
     let x, y, s0, t0, s1, t1, dt0;
     dt0 = dt*((arrWidth+arrHeight-4)/2.0);
-    for (let i=1; i<=arrWidth-2; i++) {
-      for (let j=1; j<=arrHeight-2; j++) {
+    for (let i=1; i<=Nx; i++) {
+      for (let j=1; j<=Ny; j++) {
         x = i-dt0*u[i][j];
         y = j-dt0*v[i][j];
-        if (x<1.5) {x=1.5;}
-        if (x>arrWidth-1.5) {x=arrWidth- 1.5;}
+        if (x<0.5) { x=0.5; }
+        if (x>arrWidth-0.5) { x=arrWidth-0.5; }
         i0=Math.floor(x);
         i1=i0+1;
-        if (y<1.5) {y=1.5;}
-        if (y>arrHeight-1.5) {y=arrHeight-1.5;}
+        if (y<0.5) { y=0.5; }
+        if (y>arrHeight-0.5) { y=arrHeight-0.5; }
         j0=Math.floor(y);
         j1=j0+1;
         s1 = x-i0;
@@ -293,17 +292,19 @@
 
   function set_bnd(b, x) {
     for ( let j=1; j<=arrHeight-2; j++ ) {
-      x[0][j] = b==1 ? Math.abs(x[1][j]) : x[1][j];
-      x[arrWidth-1][j] = b==1 ? -Math.abs(x[arrWidth-2][j]) : x[arrWidth-2][j];
+      // console.log(x[0][j]);
+      x[0][j] = (b==1) ? Math.abs(x[1][j]) : x[1][j];
+      // console.log(x[0][j], b, x[1][j]);
+      x[arrWidth-1][j] = (b==1) ? -Math.abs(x[arrWidth-2][j]) : x[arrWidth-2][j];
     }
     for ( let i=1; i<=arrWidth-2; i++ ) {
-      x[i][0] = b==2 ? Math.abs(x[i][1]) : x[i][1];
-      x[i][arrHeight-1] = b==2 ? -Math.abs(x[i][arrHeight-2]) : x[i][arrHeight-2];
+      x[i][0] = (b==2) ? Math.abs(x[i][1]) : x[i][1];
+      x[i][arrHeight-1] = (b==2) ? -Math.abs(x[i][arrHeight-2]) : x[i][arrHeight-2];
     }
     x[0][0] = 0.5*(x[1][0]+x[0][1]);
-    x[0][arrHeight-1] = 0.5*(x[1][arrHeight-1]+x[0][arrHeight-2]);
-    x[arrWidth-1][0] = 0.5*(x[arrWidth-2][0]+x[arrWidth-1][1]);
-    x[arrWidth-1][arrHeight-1] = 0.5*(x[arrWidth-2][arrHeight-1]+x[arrWidth-1][arrHeight-2]);
+    x[0][Ny+1] = 0.5*(x[1][Ny+1]+x[0][Ny]);
+    x[Nx+1][0] = 0.5*(x[Nx][0]+x[Nx+1][1]);
+    x[Nx+1][Ny+1] = 0.5*(x[Nx][Ny+1]+x[Nx+1][Ny]);
   }
 
 // void set_bnd ( int N, int b, flo at * x )
@@ -443,7 +444,7 @@
   let tickMilliseconds = 0;
   let lifeCycleTimeout;
   let cycleCount = 0;
-  const trackPerformance = true;
+  const trackPerformance = false;
 
   const requestAnimFrame = (function(callback, tick=0){
     return  window.requestAnimationFrame  ||
@@ -465,16 +466,16 @@
     vel_evolve();
     if (trackPerformance) { performance.mark('after velEvolve'); }
     denInput = denInput.map(row => row.map(el => el > 0 ? -el : el))
-    // drawCanvas();
+    if (!skipDrawOptimize && !denDiffOptimize) { drawCanvas(); }
     if (trackPerformance) { performance.mark('after drawCanvas'); }
     drawDensityCircles();
     if (trackPerformance) { performance.mark('after drawDensityCircles'); }
-    // drawVelocityArrows();
+    drawVelocityArrows();
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     denPrev = matrixDeepCopy(denState);
     uPrev = matrixDeepCopy(uState);
     vPrev = matrixDeepCopy(vState);
-    // console.log(' _tick _ ');
+    console.log(' _tick _ ');
     if (trackPerformance) { performance.mark('final marker'); }
     if (trackPerformance) {
       performance.measure('densityEvolve', 'lifeCycle begin','after densityEvolve');
@@ -501,23 +502,24 @@
       acc['counts'][measure.name] += 1;
       return acc;
     }, { durations: {}, counts: {} });
-    const measuresForDisplay = { '_fps_': (allSortedMeasures['counts']['frame time'] / allSortedMeasures['durations']['frame time'] * 1000) };
+    const measuresForDisplay = {
+      '_fps_': `${(allSortedMeasures['counts']['frame time']*1000) / allSortedMeasures['durations']['frame time']} frame / sec`
+    };
     Object.keys(allSortedMeasures['durations']).forEach(key => {
-      measuresForDisplay[key] = allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key];
+      measuresForDisplay[key] = `${allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key]} milliseconds`;
     });
     console.table(measuresForDisplay);
     performance.clearMeasures();
   }
 
   function reset() {
-    cancelAnimFrame(lifeCycleTimeout);
     resetState();
     drawCanvas();
     drawDensityCircles();
     drawVelocityArrows();
-    lifeCycleTimeout = requestAnimFrame(lifeCycle, tickMilliseconds);
   }
   reset();
+  play();
 
   function pauseOrPlay() {
     paused ? play() : pause();
