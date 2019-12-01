@@ -446,12 +446,12 @@
   let cycleCount = 0;
   const trackPerformance = false;
 
-  const requestAnimFrame = (function(callback, tick=0){
+  const requestAnimFrame = ((callback) => {
     return  window.requestAnimationFrame  ||
       window.webkitRequestAnimationFrame  ||
       window.mozRequestAnimationFrame     ||
-      function(callback){
-        window.setTimeout(callback, tick);
+      function(callback) {
+        window.setTimeout(callback, tickMilliseconds);
       };
   })();
 
@@ -470,25 +470,27 @@
     if (trackPerformance) { performance.mark('after drawCanvas'); }
     drawDensityCircles();
     if (trackPerformance) { performance.mark('after drawDensityCircles'); }
-    drawVelocityArrows();
+    if (!displayCircles) { drawVelocityArrows(); }
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     denPrev = matrixDeepCopy(denState);
     uPrev = matrixDeepCopy(uState);
     vPrev = matrixDeepCopy(vState);
     console.log(' _tick _ ');
     if (trackPerformance) { performance.mark('final marker'); }
-    if (trackPerformance) {
-      performance.measure('densityEvolve', 'lifeCycle begin','after densityEvolve');
-      performance.measure('velEvolve', 'after densityEvolve', 'after velEvolve');
-      performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
-      performance.measure('drawDensityCircles', 'after drawCanvas', 'after drawDensityCircles');
-      performance.measure('drawVelocityArrows', 'after drawDensityCircles', 'after drawVelocityArrows');
-      performance.measure('frame time', 'lifeCycle begin', 'final marker');
-      performance.clearMarks();
-      if (cycleCount % 50 == 0) { printAndClearMeasures(); }
-      cycleCount = cycleCount + 1;
-    }
+    if (trackPerformance) { makePerformanceMeasures(); }
+    cycleCount = cycleCount + 1;
     lifeCycleTimeout = requestAnimFrame(lifeCycle, tickMilliseconds);
+  }
+
+  function makePerformanceMeasures() {
+    performance.measure('densityEvolve', 'lifeCycle begin','after densityEvolve');
+    performance.measure('velEvolve', 'after densityEvolve', 'after velEvolve');
+    performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
+    performance.measure('drawDensityCircles', 'after drawCanvas', 'after drawDensityCircles');
+    performance.measure('drawVelocityArrows', 'after drawDensityCircles', 'after drawVelocityArrows');
+    performance.measure('frame time', 'lifeCycle begin', 'final marker');
+    performance.clearMarks();
+    if (cycleCount % 50 == 0) { printAndClearMeasures(); }
   }
 
   function printAndClearMeasures() {
