@@ -8,6 +8,13 @@
 <canvas id="draw" width="1265" height="492"></canvas>
 <button onclick="reset();">Reset</button>
 <button onclick="pauseOrPlay();" id="pauseOrPlay">Pause</button>
+<button onclick="toggleDisplayCircles();" id="toggleDisplayCircles">Change Display</button>
+<div id="debugDiv" style="display: none; margin: 40px; text-align: left; font-size: 14px;"><p>
+  Average Advect Step Size: <span id="averageAdvectStepSizeSpan"></span><br>
+  Frame per Second: <span id="fpsSpan"></span><br>
+  Physics Cycles per Second: <span id="cyclePerSecondSpan"></span> (cycle / second)<br>
+  Viscosity Diffusion Rate per second: <span id="viscosityDiffusionRateSpan"></span><br>
+</p></div>
 
 <script type="text/javascript">
   ////////////////////////////////////////////////////////////////////////////////////
@@ -53,7 +60,7 @@
   }
 
   const requestAnimFrame = ((callback) => {
-    return  window.requestAnimationFrame  ||
+    return window.requestAnimationFrame  ||
       window.webkitRequestAnimationFrame  ||
       window.mozRequestAnimationFrame     ||
       function(callback) {
@@ -78,22 +85,21 @@
   const Nx = arrWidth-2;
   const Ny = arrHeight-2;
 
-  const displayCircles = false;
+  let displayCircles = false;
   const blurOffsetY = canvas.height + 1000;
 
-  const skipDrawOptimize = false;
-  const skipDrawRate = 3;
+  const skipDrawOptimize = true;
+  const skipDrawRate = 13;
 
   const denDiffOptimize = false;
   const denDiffReq = 0.01;
-  const denDiffPrev = initMatrix(arrWidth, arrHeight, () => 0);
+  const denDiffStored = initMatrix(arrWidth, arrHeight, () => 0);
   const refreshAnywayRate = 23;
 
   function drawCanvas() {
-    ctx.fillStyle = 'lightgrey';
-    ctx.fillRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
-    ctx.strokeStyle = "grey";
   }
 
   function drawCanvasArrow(fromX, fromY, toX, toY) {
@@ -104,12 +110,12 @@
     ctx.stroke();
   }
 
-  function drawVelocityArrows() {
+  function drawVelocityArrows(velMatU, velMatV) {
     const displayAmplitude = 2 * denVelRatio;
     for (let i=0; i<arrWidth; i++) {
       for (let j=0; j<arrHeight; j++) {
-        const uDot = uState[i][j];
-        const vDot = vState[i][j];
+        const uDot = velMatU[i][j];
+        const vDot = velMatV[i][j];
         if (uDot == vDot && vDot == 0) { continue; }
         drawCanvasArrow(
           (i+1)*pixelSize-pixelSize/2.0,
@@ -121,8 +127,7 @@
     }
   }
 
-  function drawDensityCircles() {
-    ctx.strokeStyle = "black";
+  function drawDensityCircles(denMat) {
     if (displayCircles) {
       ctx.shadowOffsetY = blurOffsetY;
       ctx.shadowBlur = pixelSize;
@@ -134,11 +139,11 @@
       for (let j=0; j<arrHeight; j++) {
         const skipNum = (i+(j*arrWidth)+(cycleCount*7));
         if (skipDrawOptimize && skipNum%skipDrawRate === 0) { continue; }
-        if (denDiffOptimize && skipNum%refreshAnywayRate != 0 && denState[i][j]-denDiffPrev[i][j] < denDiffReq) { continue; }
-        denDiffPrev[i][j] = denState[i][j];
+        if (denDiffOptimize && skipNum%refreshAnywayRate !== 0 && denMat[i][j]-denDiffStored[i][j] < denDiffReq) { continue; }
+        denDiffStored[i][j] = denMat[i][j];
         const denX = (i+1)*pixelSize-pixelSize/2.0;
         const denY = (j+1)*pixelSize-pixelSize/2.0;
-        const denSize = denState[i][j]*10 / denVelRatio;
+        const denSize = denMat[i][j]*10 / denVelRatio;
         displayCircles ? canvasGradient(denX, denY, denSize) : canvasShadedSquare(denX, denY, denSize);
       }
     }
@@ -159,10 +164,9 @@
 
   function canvasShadedSquare(x, y, radius) {
     const shadeRatio = 255;
-    const squareShade = (shadeRatio / radius);
+    const squareShade = (shadeRatio / (radius+1));
     ctx.fillStyle = `rgb(${squareShade}, ${squareShade}, ${squareShade})`;
-    ctx.beginPath();
-    ctx.fillRect(x-pixelSize/2.0, y-pixelSize/2.0, pixelSize*2, pixelSize*2);
+    ctx.fillRect(x-pixelSize/2.0, y-pixelSize/2.0, pixelSize, pixelSize);
   }
 
   function canvasGradient(x, y, radius) {
@@ -175,28 +179,33 @@
   /////////////
 
   let dt = 0.002;
-  const visc = 800;
-  const denVelRatio = 40;
+  const visc = 20;
+  const denVelRatio = 0.45;
+
+  const diffusionTest = {
+    density: (x,y) => {
+      if (x < (arrWidth/2.0)+3 && x > (arrWidth/2.0)-3 && y < (arrHeight/2.0)+3 && y > (arrHeight/2.0)-3) { return denVelRatio; }
+      return 0;
+    },
+    velocityU: function() { return 0; },
+    velocityV: function() { return 0; },
+  };
+  const advectionTest = {
+    density: function() { return (Math.random())*0.2 },
+    velocityU: (x,y) => { return Math.sin(-0.002*x*y-10)/denVelRatio; },
+    velocityV: (x,y) => { return Math.cos(-0.015*x*y-10)/-denVelRatio; },
+  };
+
+  let template = advectionTest;
 
   let uState, vState, uPrev, vPrev, denState, denPrev, denInput;
 
   function resetState() {
-    const newVec = function() { return 0; };
-    // const newVec = function() { return (Math.random()-0.5)*0.01 };
-    const newVecU = (x,y) => { return Math.sin(-0.002*x*y-10)/denVelRatio; };
-    const newVecV = (x,y) => { return Math.cos(-0.015*x*y-10)/-denVelRatio; };
-    uState = initMatrix(arrWidth, arrHeight, newVecU);
-    vState = initMatrix(arrWidth, arrHeight, newVecV);
+    uState = initMatrix(arrWidth, arrHeight, template.velocityU);
+    vState = initMatrix(arrWidth, arrHeight, template.velocityV);
     uPrev = matrixDeepCopy(uState);
     vPrev = matrixDeepCopy(vState);
-    const newScalar = (x,y) => {
-      if (x===0 || y === 0 || x === arrWidth-1 || y === arrWidth-1) {
-        if (y === 0 || y === arrWidth-1) console.log(x,y)
-        return 0;
-      }
-      return Math.random() * denVelRatio;
-    }
-    denState = initMatrix(arrWidth, arrHeight, newScalar);
+    denState = initMatrix(arrWidth, arrHeight, template.density);
     denPrev = matrixDeepCopy(denState);
     denInput = initMatrix(arrWidth, arrHeight, () => 0);
   }
@@ -242,6 +251,8 @@
         t0 = 1-t1;
         d[i][j] = s0 * ( t0*d0[i0][j0] + t1*d0[i0][j1] ) +
           s1 * ( t0*d0[i1][j0] + t1*d0[i1][j1] );
+
+        advectStepSize.push(Math.max(i-i0, j-j0));
       }
     }
     set_bnd ( b, d );
@@ -317,13 +328,21 @@
   // }
 
   function set_bnd(b, x) {
-    for ( let j=1; j<=arrHeight-2; j++ ) {
+    for ( let j=1; j<=Ny; j++ ) {
       x[0][j] = (b==1) ? Math.abs(x[1][j]) : x[1][j];
-      x[arrWidth-1][j] = (b==1) ? -Math.abs(x[arrWidth-2][j]) : x[arrWidth-2][j];
+      // x[0][j] = (b==1) ? Math.max(x[1][j],0) : x[1][j];
+      // x[0][j] = (b==1) ? -x[1][j] : x[1][j];
+      x[Nx+1][j] = (b==1) ? -Math.abs(x[Nx][j]) : x[Nx][j];
+      // x[Nx+1][j] = (b==1) ? Math.min(x[Nx][j],0) : x[Nx][j];
+      // x[Nx+1][j] = (b==1) ? -x[Nx][j] : x[Nx][j];
     }
-    for ( let i=1; i<=arrWidth-2; i++ ) {
+    for ( let i=1; i<=Nx; i++ ) {
       x[i][0] = (b==2) ? Math.abs(x[i][1]) : x[i][1];
-      x[i][arrHeight-1] = (b==2) ? -Math.abs(x[i][arrHeight-2]) : x[i][arrHeight-2];
+      // x[i][0] = (b==2) ? Math.max(x[i][1],0) : x[i][1];
+      // x[i][0] = (b==2) ? -x[i][1] : x[i][1];
+      x[i][Ny+1] = (b==2) ? -Math.abs(x[i][Ny]) : x[i][Ny];
+      // x[i][Ny+1] = (b==2) ? Math.min(x[i][Ny],0) : x[i][Ny];
+      // x[i][Ny+1] = (b==2) ? -x[i][Ny] : x[i][Ny];
     }
     x[0][0] = 0.5*(x[1][0]+x[0][1]);
     x[0][Ny+1] = 0.5*(x[1][Ny+1]+x[0][Ny]);
@@ -346,62 +365,30 @@
 // x[IX(N+1,N+1)] = 0.5*(x[IX(N,N+1)]+x[IX(N+1,N )]);
 // }
 
-  function add_den_input(m) {
-    const inputMult = 2000 * denVelRatio;
+  function add_den_input(m, inputM) {
+    const inputMult = 0; //2000 * denVelRatio;
     const valAt = (x,y) => {
-      if (denInput[x][y] <= 0) { return 0; }
-      return denInput[x][y]*inputMult*dt;
+      return m[x][y] + (inputM[x][y]*inputMult*dt);
     }
     m = initMatrix(arrWidth, arrHeight, valAt);
   }
 
   function add_vel_input(u, v) {
     const inputMult = 2000000 / denVelRatio;
-    const uValAt = (x,y) => {
-      if (
-        denInput[x+1] == undefined ||
-        denInput[x-1] == undefined
-      ) { return 0; }
-      const rght = Math.max(denInput[x+1][y], 0);
-      const lft = Math.max(denInput[x-1][y], 0);
-
-      // if (denInput[x+1][y] != 0 || denInput[x-1][y] != 0) { console.log('velu',inputMult * dt * (
-      //     - rght
-      //     + lft
-      //   )); }
-
-      return inputMult * dt * (
-          - rght
-          + lft
-        );
-    }
-    const vValAt = (x,y) => {
-      if (
-        denInput[x][y+1] === undefined ||
-        denInput[x][y-1] === undefined
-      ) { return 0; }
-
-      const rght = Math.max(denInput[x][y+1], 0);
-      const lft = Math.max(denInput[x][y-1], 0);
-
-      // if (denInput[x][y+1] != 0 || denInput[x][y-1] != 0) { console.log('velv',rght,lft); }
-
-      return inputMult * dt * (
-          - rght
-          + lft
-        );
-    }
+    const uValAt = (x,y) => 0;
+    const vValAt = (x,y) => 0;
     u = initMatrix(arrWidth, arrHeight, uValAt);
     v = initMatrix(arrWidth, arrHeight, vValAt);
   }
 
-  function densityEvolve() {
-    add_den_input(denState);
-    // denPrev = initMatrix(arrWidth, arrHeight, ()=>0);
-    // add_source(denState, denPrev, dt);
+  function densityEvolve() { // denState is previous step state, denPrev is the input
+    // swap(denState, denPrev);
+    // denPrev = matrixDeepCopy(denState);
+    // denState = matrixDeepCopy(denPrev);
+    add_den_input(denPrev, denInput);
     // swap(denState, denPrev);
     diffuse(0, denState, denPrev, visc, dt);
-    // swap(denState, denPrev);
+    swap(denState, denPrev);
     advect(0, denState, denPrev, uState, vState, dt);
   }
 
@@ -416,8 +403,8 @@
     diffuse(1, uState, uPrev, visc, dt);
     diffuse(2, vState, vPrev, visc, dt);
     // project(uState, vState, uPrev, vPrev);
-    // swap(uState, uPrev);
-    // swap(vState, vPrev);
+    swap(uState, uPrev);
+    swap(vState, vPrev);
     advect(1, uState, uPrev, uPrev, vPrev, dt);
     advect(2, vState, vPrev, uPrev, vPrev, dt);
     // project(uState, vState, uPrev, vPrev);
@@ -442,27 +429,31 @@
 
   function mouseupFromUser() {
     isMouseDown = false;
-    clearMatrix(denInput);
   }
 
   function mousemoveFromUser($event) {
-    if (!isMouseDown || denInput[Math.floor($event.offsetX/pixelSize)][Math.floor($event.offsetY/pixelSize)] !== 0) { return; }
-    denInput[Math.floor($event.offsetX/pixelSize)][Math.floor($event.offsetY/pixelSize)] = 1;
+    // if (!isMouseDown || denInput[Math.floor($event.offsetX/pixelSize)][Math.floor($event.offsetY/pixelSize)] !== 0) { return; }
+    // denInput[Math.floor($event.offsetX/pixelSize)][Math.floor($event.offsetY/pixelSize)] = 1;
   }
 
   let tickMilliseconds = 0;
   let lifeCycleTimeout;
   let cycleCount = 0;
-  const cycleBuffer = 4;
+  const cycleBuffer = 1;
   const trackPerformance = true;
+  let measuresForDisplay = {};
+  let fps = 10;
+
+  const debug = true;
+  if (debug) { document.querySelector('#debugDiv').style.display ='flex'; }
+  let advectStepSize = [];
 
   function evolve() {
     if (trackPerformance) { performance.mark('evolve begin'); }
+    vel_evolve();
+    if (trackPerformance) { performance.mark('after velEvolve'); }
     densityEvolve();
     if (trackPerformance) { performance.mark('after densityEvolve'); }
-    vel_evolve();
-    // denInput = denInput.map(row => row.map(el => el > 0 ? -el : el))
-    if (trackPerformance) { performance.mark('after velEvolve'); }
   }
 
   const lifeCycle = function() {
@@ -470,14 +461,25 @@
     for (let i=0; i<cycleBuffer; i++) { evolve(); }
     if (!skipDrawOptimize && !denDiffOptimize) { drawCanvas(); }
     if (trackPerformance) { performance.mark('after drawCanvas'); }
-    drawDensityCircles();
+    drawDensityCircles(denPrev);
     if (trackPerformance) { performance.mark('after drawDensityCircles'); }
-    if (!displayCircles) { drawVelocityArrows(); }
+    if (!displayCircles) { drawVelocityArrows(uPrev, vPrev); }
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     denPrev = matrixDeepCopy(denState);
     uPrev = matrixDeepCopy(uState);
     vPrev = matrixDeepCopy(vState);
     console.log(' _tick _ ');
+    if (debug) {
+      const averageAdvectStepSize = Math.round(100*cycleBuffer*advectStepSize.reduce((a, b) => a + b, 0) / (advectStepSize.length))/100;
+      // Adjust denVelRatio until this this is correct
+      document.querySelector('#averageAdvectStepSizeSpan').innerHTML = `${averageAdvectStepSize} (should be between 1 and ${arrWidth/3.0})`;
+      advectStepSize = [];
+      document.querySelector('#fpsSpan').innerHTML = measuresForDisplay['_fps_'];
+      document.querySelector('#cyclePerSecondSpan').innerHTML = fps * cycleBuffer;
+      const avgViscDiff = dt*visc*fps*cycleBuffer;
+      document.querySelector('#viscosityDiffusionRateSpan').innerHTML = avgViscDiff;
+    }
+    advectStepSize = [];
     if (trackPerformance) { performance.mark('final marker'); }
     if (trackPerformance) { makePerformanceMeasures(); }
     cycleCount = cycleCount + 1;
@@ -485,14 +487,14 @@
   }
 
   function makePerformanceMeasures() {
-    performance.measure('densityEvolve', 'evolve begin','after densityEvolve');
-    performance.measure('velEvolve', 'after densityEvolve', 'after velEvolve');
+    performance.measure('velEvolve', 'evolve begin', 'after velEvolve');
+    performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
     performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
     performance.measure('drawDensityCircles', 'after drawCanvas', 'after drawDensityCircles');
     performance.measure('drawVelocityArrows', 'after drawDensityCircles', 'after drawVelocityArrows');
     performance.measure('frame time', 'lifeCycle begin', 'final marker');
     performance.clearMarks();
-    if (cycleCount % 50 == 0) { printAndClearMeasures(); }
+    if (cycleCount % 30 == 0) { printAndClearMeasures(); }
   }
 
   function printAndClearMeasures() {
@@ -506,8 +508,9 @@
       acc['counts'][measure.name] += 1;
       return acc;
     }, { durations: {}, counts: {} });
-    const measuresForDisplay = {
-      '_fps_': `${(allSortedMeasures['counts']['frame time']*1000) / allSortedMeasures['durations']['frame time']} frame / sec`
+    fps = Math.round((allSortedMeasures['counts']['frame time']*1000) / allSortedMeasures['durations']['frame time'] *100)/100;
+    measuresForDisplay = {
+      '_fps_': `${fps} frame / sec`
     };
     Object.keys(allSortedMeasures['durations']).forEach(key => {
       measuresForDisplay[key] = `${allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key]} milliseconds`;
@@ -516,14 +519,9 @@
     performance.clearMeasures();
   }
 
-  function reset() {
-    resetState();
-    drawCanvas();
-    drawDensityCircles();
-    drawVelocityArrows();
+  function toggleDisplayCircles() {
+    displayCircles = displayCircles ? false : true;
   }
-  reset();
-  play();
 
   function pauseOrPlay() {
     paused ? play() : pause();
@@ -542,6 +540,15 @@
     const pausePlayButton = document.querySelector('#pauseOrPlay');
     pausePlayButton.innerHTML = 'Pause';
   }
+
+  function reset() {
+    resetState();
+    drawCanvas();
+    drawDensityCircles(denPrev);
+    drawVelocityArrows(uPrev, vPrev);
+  }
+  reset();
+  play();
 
 </script>
 
