@@ -88,10 +88,10 @@
   let displayCircles = false;
   const blurOffsetY = canvas.height + 1000;
 
-  const skipDrawOptimize = true;
+  let skipDrawOptimize = false;
   const skipDrawRate = 13;
 
-  const denDiffOptimize = false;
+  let denDiffOptimize = false;
   const denDiffReq = 0.01;
   const denDiffStored = initMatrix(arrWidth, arrHeight, () => 0);
   const refreshAnywayRate = 23;
@@ -259,8 +259,8 @@
   }
 
   function project(u, v, p, div) {
-    const totalArea = (Nx*Ny)/2.0;
-    const h = 1.0/(totalArea);
+    const halvedTotalArea = (Nx+Ny)/2.0;
+    const h = 1.0/(halvedTotalArea);
     for ( let i=1; i<=Nx; i++ ) {
       for ( let j=1; j<=Ny; j++ ) {
         div[i][j] = -0.5*h*(
@@ -521,6 +521,10 @@
 
   function toggleDisplayCircles() {
     displayCircles = displayCircles ? false : true;
+    if (displayCircles) {
+      skipDrawOptimize = false;
+      denDiffOptimize = false;
+    }
   }
 
   function pauseOrPlay() {
