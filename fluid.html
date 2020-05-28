@@ -6,15 +6,21 @@
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
 <canvas id="draw" width="1265" height="492"></canvas>
-<button onclick="reset();">Reset</button>
-<button onclick="pauseOrPlay();" id="pauseOrPlay">Pause</button>
-<button onclick="toggleDisplayCircles();" id="toggleDisplayCircles">Change Display</button>
-<div id="debugDiv" style="display: none; margin: 40px; text-align: left; font-size: 14px;"><p>
-  Average Advect Step Size: <span id="averageAdvectStepSizeSpan"></span><br>
-  Frame per Second: <span id="fpsSpan"></span><br>
-  Physics Cycles per Second: <span id="cyclePerSecondSpan"></span> (cycle / second)<br>
-  Viscosity Diffusion Rate per second: <span id="viscosityDiffusionRateSpan"></span><br>
-</p></div>
+<div id="bottom-ui">
+  <div id="control-buttons">
+    <button onclick="reset();">Reset</button>
+    <button onclick="pauseOrPlay();" id="pauseOrPlay">Pause</button>
+    <button onclick="toggleDisplayCircles();" id="toggleDisplayCircles">Change Display</button>
+  </div>
+  <div id="debugDiv" style="display: none; margin: 40px; text-align: left; font-size: 14px;"><p>
+    Average Advect Step Size: <span id="averageAdvectStepSizeSpan"></span><br>
+    Frame per Second: <span id="fpsSpan"></span><br>
+    Physics Cycles per Second: <span id="cyclePerSecondSpan"></span> (cycle / second)<br>
+    Viscosity Diffusion Rate per second: <span id="viscosityDiffusionRateSpan"></span><br>
+    Average velocity magnitude: <span id="averageVelocity"></span><br>
+    Density (best b/t 0 and 1) avg: <span id="avgDensity"></span>, min: <span id="minDensity"></span>, max: <span id="maxDensity"></span><br>
+  </p></div>
+</div>
 
 <script type="text/javascript">
   ////////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +104,7 @@
 
   function drawCanvas() {
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
     ctx.strokeRect(0, 0, arrWidth*pixelSize, arrHeight*pixelSize);
   }
 
@@ -174,6 +180,13 @@
     ctx.arc(x, y-blurOffsetY, radius*2.0*pixelSize/20.0, 0, Math.PI * 2, true );
   }
 
+  function drawParticles(particles) {
+    particles.forEach(particle => {
+      ctx.fillStyle = 'red';
+      ctx.fillRect(particle.x, particle.y, 4, 4);
+    });
+  }
+
   /////////////
   // Physics //
   /////////////
@@ -198,7 +211,7 @@
 
   let template = advectionTest;
 
-  let uState, vState, uPrev, vPrev, denState, denPrev, denInput;
+  let uState, vState, uPrev, vPrev, denState, denPrev, denInput, particles;
 
   function resetState() {
     uState = initMatrix(arrWidth, arrHeight, template.velocityU);
@@ -208,10 +221,21 @@
     denState = initMatrix(arrWidth, arrHeight, template.density);
     denPrev = matrixDeepCopy(denState);
     denInput = initMatrix(arrWidth, arrHeight, () => 0);
+    particles = [
+      // { x: 50, y: 50, xVel: 0, yVel: 0 },
+      // { x: 150, y: 150, xVel: 0, yVel: 0 },
+      // { x: 250, y: 50, xVel: 0, yVel: 0 },
+      // { x: 250, y: 150, xVel: 0, yVel: 0 },
+      // { x: 450, y: 250, xVel: 0, yVel: 0 },
+    ];
+    particles.forEach(particle => {
+      particle.xVel = uState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
+      particle.yVel = vState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
+    });
   }
 
   function diffuse(b, x, x0, visc, dt) {
-    const a=dt*visc;
+    const a=dt*visc*Nx*Ny;
     for (let k=0; k<20; k++ ) {
       for (let i=1; i<=Nx; i++ ) {
         for (let j=1; j<=Ny; j++ ) {
@@ -223,7 +247,7 @@
               x[i][j-1]+
               x[i][j+1]
             )
-          )/(1+4*a);
+          )/(1+(4*a));
         }
       }
       set_bnd(b, x);
@@ -232,17 +256,17 @@
 
   function advect(b, d, d0, u, v, dt) {
     let x, y, s0, t0, s1, t1, dt0;
-    dt0 = dt*((arrWidth+arrHeight-4)/2.0);
+    dt0 = dt*((Nx+Ny)/2.0);
     for (let i=1; i<=Nx; i++) {
       for (let j=1; j<=Ny; j++) {
         x = i-dt0*u[i][j];
         y = j-dt0*v[i][j];
-        if (x<1.5) { x=1.5; }
-        if (x>arrWidth-1.5) { x=arrWidth-1.5; }
+        if (x<0.5) { x=0.5; }
+        if (x>Nx+0.5) { x=Nx+0.5; }
         i0=Math.floor(x);
         i1=i0+1;
-        if (y<1.5) { y=1.5; }
-        if (y>arrHeight-1.5) { y=arrHeight-1.5; }
+        if (y<0.5) { y=0.5; }
+        if (y>Ny+0.5) { y=Ny+0.5; }
         j0=Math.floor(y);
         j1=j0+1;
         s1 = x-i0;
@@ -250,7 +274,7 @@
         t1 = y-j0;
         t0 = 1-t1;
         d[i][j] = s0 * ( t0*d0[i0][j0] + t1*d0[i0][j1] ) +
-          s1 * ( t0*d0[i1][j0] + t1*d0[i1][j1] );
+                  s1 * ( t0*d0[i1][j0] + t1*d0[i1][j1] );
 
         advectStepSize.push(Math.max(i-i0, j-j0));
       }
@@ -259,8 +283,8 @@
   }
 
   function project(u, v, p, div) {
-    const halvedTotalArea = (Nx+Ny)/2.0;
-    const h = 1.0/(halvedTotalArea);
+    const NN = (Nx+Ny)/2.0;
+    const h = 1.0/(NN);
     for ( let i=1; i<=Nx; i++ ) {
       for ( let j=1; j<=Ny; j++ ) {
         div[i][j] = -0.5*h*(
@@ -329,20 +353,34 @@
 
   function set_bnd(b, x) {
     for ( let j=1; j<=Ny; j++ ) {
-      x[0][j] = (b==1) ? Math.abs(x[1][j]) : x[1][j];
+      // x[0][j] = (b==1) ? Math.abs(x[1][j]) : x[1][j];
       // x[0][j] = (b==1) ? Math.max(x[1][j],0) : x[1][j];
       // x[0][j] = (b==1) ? -x[1][j] : x[1][j];
-      x[Nx+1][j] = (b==1) ? -Math.abs(x[Nx][j]) : x[Nx][j];
+      // x[Nx+1][j] = (b==1) ? -Math.abs(x[Nx][j]) : x[Nx][j];
       // x[Nx+1][j] = (b==1) ? Math.min(x[Nx][j],0) : x[Nx][j];
       // x[Nx+1][j] = (b==1) ? -x[Nx][j] : x[Nx][j];
+      if (b==1) {
+        x[0][j] = 0.333*(-x[1][j] + x[0][j+1] + x[0][j-1]);
+        x[Nx+1][j] = 0.333*(-x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
+      } else {
+        x[0][j] = 0.333*(x[1][j] + x[0][j+1] + x[0][j-1]);
+        x[Nx+1][j] = 0.333*(x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
+      }
     }
     for ( let i=1; i<=Nx; i++ ) {
-      x[i][0] = (b==2) ? Math.abs(x[i][1]) : x[i][1];
+      // x[i][0] = (b==2) ? Math.abs(x[i][1]) : x[i][1];
       // x[i][0] = (b==2) ? Math.max(x[i][1],0) : x[i][1];
       // x[i][0] = (b==2) ? -x[i][1] : x[i][1];
-      x[i][Ny+1] = (b==2) ? -Math.abs(x[i][Ny]) : x[i][Ny];
+      // x[i][Ny+1] = (b==2) ? -Math.abs(x[i][Ny]) : x[i][Ny];
       // x[i][Ny+1] = (b==2) ? Math.min(x[i][Ny],0) : x[i][Ny];
       // x[i][Ny+1] = (b==2) ? -x[i][Ny] : x[i][Ny];
+      if (b==2) {
+        x[i][0] = 0.333*(-x[i][1] + x[i+1][0] + x[i-1][0]);
+        x[i][Ny+1] = 0.333*(-x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
+      } else {
+        x[i][0] = 0.333*(x[i][1] + x[i+1][0] + x[i-1][0]);
+        x[i][Ny+1] = 0.333*(x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
+      }
     }
     x[0][0] = 0.5*(x[1][0]+x[0][1]);
     x[0][Ny+1] = 0.5*(x[1][Ny+1]+x[0][Ny]);
@@ -386,28 +424,45 @@
     // denPrev = matrixDeepCopy(denState);
     // denState = matrixDeepCopy(denPrev);
     add_den_input(denPrev, denInput);
-    // swap(denState, denPrev);
+    swap(denState, denPrev);
     diffuse(0, denState, denPrev, visc, dt);
     swap(denState, denPrev);
     advect(0, denState, denPrev, uState, vState, dt);
   }
 
+  function add_source(x, source, dt) {
+    for (let i=0; i<arrWidth; i++) {
+      for (let j=0; j<arrHeight; j++) {
+        x[i][j] += dt*source[i][j];
+      }
+    }
+  }
+
   function vel_evolve() {
-    // add_source(uState, uPrev, dt);
-    // add_source(vState, vPrev, dt);
-    add_vel_input(uState, vState);
-    // uPrev = initMatrix(arrWidth, arrHeight, ()=>0);
-    // vPrev = initMatrix(arrWidth, arrHeight, ()=>0);
-    // swap(uState, uPrev);
-    // swap(vState, vPrev);
-    diffuse(1, uState, uPrev, visc, dt);
-    diffuse(2, vState, vPrev, visc, dt);
-    // project(uState, vState, uPrev, vPrev);
     swap(uState, uPrev);
     swap(vState, vPrev);
+    add_vel_input(uState, vState);
+    diffuse(1, uState, uPrev, visc, dt);
+    diffuse(2, vState, vPrev, visc, dt);
+    swap(uPrev, uState);
+    swap(vPrev, vState);
     advect(1, uState, uPrev, uPrev, vPrev, dt);
     advect(2, vState, vPrev, uPrev, vPrev, dt);
-    // project(uState, vState, uPrev, vPrev);
+    project(uState, vState, uPrev, vPrev);
+  }
+
+  function particles_evolve(particles, uState, vState) {
+    const fluidDensity = 0.006;
+    particles.forEach((particle) => {
+      x = Math.round(particle.x / pixelSize);
+      y = Math.round(particle.y / pixelSize);
+      if (x > 0 && x < arrWidth-1 && y > 0 && y < arrHeight-1) {
+        particle.xVel = (fluidDensity * pixelSize * (denVelRatio * uState[x][y] * dt)) / particle.xVel;
+        particle.yVel = (fluidDensity * pixelSize * particle.yVel) / (denVelRatio * vState[x][y] * dt);
+      }
+      particle.x += particle.xVel * dt;
+      particle.y += particle.yVel * dt;
+    });
   }
 
   ////////////////
@@ -454,6 +509,7 @@
     if (trackPerformance) { performance.mark('after velEvolve'); }
     densityEvolve();
     if (trackPerformance) { performance.mark('after densityEvolve'); }
+    particles_evolve(particles, uState, vState);
   }
 
   const lifeCycle = function() {
@@ -463,7 +519,8 @@
     if (trackPerformance) { performance.mark('after drawCanvas'); }
     drawDensityCircles(denPrev);
     if (trackPerformance) { performance.mark('after drawDensityCircles'); }
-    if (!displayCircles) { drawVelocityArrows(uPrev, vPrev); }
+    if (debug && !displayCircles) { drawVelocityArrows(uPrev, vPrev); }
+    drawParticles(particles);
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     denPrev = matrixDeepCopy(denState);
     uPrev = matrixDeepCopy(uState);
@@ -478,6 +535,24 @@
       document.querySelector('#cyclePerSecondSpan').innerHTML = fps * cycleBuffer;
       const avgViscDiff = dt*visc*fps*cycleBuffer;
       document.querySelector('#viscosityDiffusionRateSpan').innerHTML = avgViscDiff;
+      if (cycleCount % 30 ==0) {
+        velTotal = 0;
+        denTotal = 0;
+        denMin = 0;
+        denMax = 0;
+        for (let i=0; i <= Nx; i++) {
+          for (let j=0; j <= Ny; j++) {
+            velTotal += Math.sqrt(uState[i][j]*uState[i][j] + vState[i][j]*vState[i][j]);
+            denTotal += denState[i][j];
+            if (denState[i][j] < denMin) { denMin = denState[i][j]; }
+            if (denState[i][j] > denMax) { denMax = denState[i][j]; }
+          }
+        }
+        document.querySelector('#averageVelocity').innerHTML = velTotal / (Nx*Ny);
+        document.querySelector('#avgDensity').innerHTML = denTotal / (Nx*Ny);
+        document.querySelector('#minDensity').innerHTML = denMin;
+        document.querySelector('#maxDensity').innerHTML = denMax;
+      }
     }
     advectStepSize = [];
     if (trackPerformance) { performance.mark('final marker'); }
@@ -549,7 +624,7 @@
     resetState();
     drawCanvas();
     drawDensityCircles(denPrev);
-    drawVelocityArrows(uPrev, vPrev);
+    debug && drawVelocityArrows(uPrev, vPrev);
   }
   reset();
   play();
