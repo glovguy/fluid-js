@@ -5,7 +5,7 @@
 </head>
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
-<canvas id="draw" width="1265" height="492" style="cursor: move"></canvas>
+<canvas id="draw" style="cursor: move"></canvas>
 <div id="bottom-ui">
   <div id="control-buttons">
     <button onclick="reset();">Reset</button>
@@ -22,6 +22,30 @@
     Density (best b/t 0 and 1) avg: <span id="avgDensity"></span>, min: <span id="minDensity"></span>, max: <span id="maxDensity"></span><br />
   </p></div>
 </div>
+
+<style>
+  button {
+    font-size: .875rem;
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: .0892857143em;
+    border: none;
+    outline: none;
+    border-radius: 4px;
+    background-color: rgb(120,120,120);
+    color: rgb(245, 245, 245);
+    padding: 0 16px 0 16px;
+    height: 36px;
+  }
+
+  @media only screen and (min-width: 768px) and (max-width: 1199px) {
+    button {
+      width: 98%;
+      height: 42px;
+      margin: 2px;
+    }
+  }
+</style>
 
 <script type="text/javascript">
   'use strict'
@@ -43,6 +67,17 @@
       matrix[i] = innerMat;
     }
     return matrix;
+  }
+
+  function overwriteMatrix(mat, val=function() { return 0; }) {
+    const x = mat.length;
+    const y = mat[0].length;
+    for(var i=0; i<x; i++) {
+      for (let j=0; j<y; j++) {
+        mat[i][j] = val(i,j);
+      }
+    }
+    return;
   }
 
   function matrixDeepCopy(mat) {
@@ -86,6 +121,16 @@
 
   const canvas = document.querySelector('#draw');
   const ctx = canvas.getContext('2d');
+  if (window.innerWidth >= 1200) {
+    canvas.width = 1200;
+    canvas.height = 492;
+  } else if (window.innerWidth >= 768) {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+  } else {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+  }
 
   const pixelSize = 8;
   const arrWidth = Math.floor(canvas.width / pixelSize);
@@ -210,6 +255,9 @@
     velocityU: function() { return 0; },
     velocityV: function() { return 0; },
     particles: function() { return []; },
+    denSource: function() { return 0; },
+    uSource: function() { return 0; },
+    vSource: function() { return 0; },
   };
   const advectionTest = {
     density: function() { return (Math.random())*0.2 },
@@ -228,29 +276,56 @@
         particle.yVel = vState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
       });
       return ps;
-    }
+    },
+    denSource: function() { return 0; },
+    uSource: function() { return 0; },
+    vSource: function() { return 0; }
   };
   const candleTest = {
     density: function(x,y) {
       if (
-        x >= Math.floor(arrWidth/2.0)-2 &&
-          x <= Math.floor(arrWidth/2.0)+2 &&
-          y >= arrHeight-2
+        x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
+          x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
+          y >= arrHeight-(arrHeight/30)
         ) { return 1; }
       return 0;
     },
     velocityU: (x,y) => {
+      if (
+        x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
+          x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
+          y >= arrHeight-(arrHeight/30)
+        ) { return 10; }
       return 0;
     },
     velocityV: (x,y) => {
       if (
-        x >= Math.floor(arrWidth/2.0)-(20/pixelSize) &&
-          x <= Math.floor(arrWidth/2.0)+(20/pixelSize) &&
-          y >= arrHeight-(80/pixelSize)
-        ) { return -2; }
+        x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
+          x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
+          y >= arrHeight-(arrHeight/30)
+        ) { return -100; }
       return 0;
     },
-    particles: function() { return []; }
+    particles: function() { return []; },
+    denSource: function(x,y) {
+      if (
+        x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
+          x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
+          y >= arrHeight-(arrHeight/30)
+        ) { return 0.7; }
+      return 0;
+    },
+    uSource: (x,y) => {
+      return 0;
+    },
+    vSource: (x,y) => {
+      if (
+        x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
+          x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
+          y >= arrHeight-(arrHeight/30)
+        ) { return -100; }
+      return 0;
+    },
   };
 
   let template = candleTest;
@@ -421,7 +496,7 @@
 
   function densityEvolve(Nx, Ny, visc, dt, denState, denPrev, denInput) {
     add_source(denPrev, denInput, dt);
-    clearMatrix(denInput);
+    overwriteMatrix(denInput, template.denSource);
     swap(denState, denPrev);
     diffuse(Nx, Ny, 0, denState, denPrev, visc, dt);
     swap(denState, denPrev);
@@ -433,8 +508,8 @@
     swap(vState, vPrev);
     add_source(uPrev, uInput, dt);
     add_source(vPrev, vInput, dt);
-    clearMatrix(uInput);
-    clearMatrix(vInput);
+    overwriteMatrix(uInput, template.uSource);
+    overwriteMatrix(vInput, template.vSource);
     diffuse(Nx, Ny, 1, uState, uPrev, visc, dt);
     diffuse(Nx, Ny, 2, vState, vPrev, visc, dt);
     swap(uPrev, uState);
@@ -475,14 +550,25 @@
   let paused = false;
 
   canvas.addEventListener('mousedown', clickFromUser);
+  canvas.addEventListener('touchstart', touchFromUser);
   canvas.addEventListener('mouseup', mouseupFromUser);
+  canvas.addEventListener('touchend', mouseupFromUser);
   canvas.addEventListener('mousemove', mousemoveFromUser);
-  canvas.addEventListener('mouseout', mousemoveFromUser);
+  canvas.addEventListener('touchmove', touchmoveFromUser);
+  canvas.addEventListener('mouseout', mouseupFromUser);
+  canvas.addEventListener('touchcancel', mouseupFromUser);
 
   function clickFromUser($event) {
     isMouseDown = true;
-    // addSmokeDensityAt($event.offsetX,$event.offsetY);
     addWindAt($event.offsetX,$event.offsetY);
+  }
+
+  function touchFromUser($event) {
+    isMouseDown = true;
+    const canvasRect = $event.target.getBoundingClientRect();
+    const tX = $event.targetTouches[0].clientX - canvasRect.x;
+    const tY = $event.targetTouches[0].clientY - canvasRect.y;
+    addWindAt(tX,tY);
   }
 
   function addSmokeDensityAt(eventX, eventY) {
@@ -514,9 +600,15 @@
 
   function mousemoveFromUser($event) {
     if (!isMouseDown) { return; }
-    // addSmokeDensityAt($event.offsetX,$event.offsetY);
     addWindAt($event.offsetX,$event.offsetY);
-    // denInput[Math.floor($event.offsetX/pixelSize)][Math.floor($event.offsetY/pixelSize)] = 1;
+  }
+
+  function touchmoveFromUser($event) {
+    const canvasRect = $event.target.getBoundingClientRect();
+    const tX = $event.targetTouches[0].clientX - canvasRect.x;
+    const tY = $event.targetTouches[0].clientY - canvasRect.y;
+    if (!isMouseDown) { return; }
+    addWindAt(tX,tY);
   }
 
   let tickMilliseconds = 0;
