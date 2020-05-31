@@ -5,7 +5,7 @@
 </head>
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
-<canvas id="draw" width="1265" height="492"></canvas>
+<canvas id="draw" width="1265" height="492" style="cursor: move"></canvas>
 <div id="bottom-ui">
   <div id="control-buttons">
     <button onclick="reset();">Reset</button>
@@ -215,9 +215,22 @@
     density: function() { return (Math.random())*0.2 },
     velocityU: (x,y) => { return Math.sin(-0.04*(x/pixelSize)*(y/pixelSize)-10)/denVelRatio; },
     velocityV: (x,y) => { return Math.cos(-0.3*(x/pixelSize)*(y/pixelSize)-10)/-denVelRatio; },
-    particles: function() { return []; },
+    particles: () => {
+      let ps = [
+        { x: 50,  y: 50,  xVel: 0, yVel: 0, decay: -80 },
+        { x: 150, y: 150, xVel: 0, yVel: 0, decay: -70 },
+        { x: 250, y: 50,  xVel: 0, yVel: 0, decay: -80 },
+        { x: 250, y: 150, xVel: 0, yVel: 0, decay: -60 },
+        { x: 450, y: 250, xVel: 0, yVel: 0, decay: -80 },
+      ];
+      ps.forEach(particle => {
+        particle.xVel = uState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
+        particle.yVel = vState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
+      });
+      return ps;
+    }
   };
-  const campfireTest = {
+  const candleTest = {
     density: function(x,y) {
       if (
         x >= Math.floor(arrWidth/2.0)-2 &&
@@ -237,24 +250,10 @@
         ) { return -2; }
       return 0;
     },
-    particles: (x,y) => {
-      return [];
-      // let ps = [
-      //   { x: 50,  y: 50,  xVel: 0, yVel: 0, decay: 80 },
-      //   { x: 150, y: 150, xVel: 0, yVel: 0, decay: 70 },
-      //   { x: 250, y: 50,  xVel: 0, yVel: 0, decay: 80 },
-      //   { x: 250, y: 150, xVel: 0, yVel: 0, decay: 60 },
-      //   { x: 450, y: 250, xVel: 0, yVel: 0, decay: 80 },
-      // ];
-      // ps.forEach(particle => {
-      //   particle.xVel = uState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
-      //   particle.yVel = vState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
-      // });
-      // return ps;
-    }
+    particles: function() { return []; }
   };
 
-  let template = campfireTest;
+  let template = candleTest;
 
   let uState, vState, uPrev, vPrev, denState, denPrev, denInput, uInput, vInput, particles;
 
@@ -448,14 +447,16 @@
   function particles_evolve(particles, uState, vState) {
     const fluidDensity = 9000;
     particles.forEach((particle) => {
-      x = Math.round(particle.x / pixelSize);
-      y = Math.round(particle.y / pixelSize);
+      const x = Math.round(particle.x / pixelSize);
+      const y = Math.round(particle.y / pixelSize);
+      let pAccelerationX = 0;
+      let pAccelerationY = 0;
       if (x > 0 && x < arrWidth-1 && y > 0 && y < arrHeight-1) {
         pAccelerationX = fluidDensity * uState[x][y];
         pAccelerationY = fluidDensity * vState[x][y];
       }
-        particle.xVel += pAccelerationX * dt;
-        particle.yVel += pAccelerationY * dt;
+      particle.xVel += pAccelerationX * dt;
+      particle.yVel += pAccelerationY * dt;
       particle.x += particle.xVel * dt;
       particle.y += particle.yVel * dt;
       particle.decay -= 1;
