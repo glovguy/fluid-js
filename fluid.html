@@ -5,7 +5,7 @@
 </head>
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
-<canvas id="draw" style="cursor: move"></canvas>
+<canvas id="draw" style="cursor: move;"></canvas>
 <div id="bottom-ui">
   <div id="control-buttons">
     <button onclick="reset();">Reset</button>
@@ -564,6 +564,7 @@
   }
 
   function touchFromUser($event) {
+    $event.preventDefault();
     isMouseDown = true;
     const canvasRect = $event.target.getBoundingClientRect();
     const tX = $event.targetTouches[0].clientX - canvasRect.x;
@@ -604,6 +605,7 @@
   }
 
   function touchmoveFromUser($event) {
+    $event.preventDefault();
     const canvasRect = $event.target.getBoundingClientRect();
     const tX = $event.targetTouches[0].clientX - canvasRect.x;
     const tY = $event.targetTouches[0].clientY - canvasRect.y;
