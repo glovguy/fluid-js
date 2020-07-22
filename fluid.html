@@ -146,6 +146,7 @@
   document.querySelector("#pixelCount").innerText = Nx*Ny;
 
   let displayCircles = false;
+  let drawVelocity = false;
   const blurOffsetY = canvas.height + 1000;
 
   let denDiffOptimize = true;
@@ -188,7 +189,7 @@
     }
   }
 
-  function drawDensityCircles(denMat, optimize=true) {
+  function drawDensity(denMat, optimize=true) {
     if (displayCircles) {
       ctx.shadowOffsetY = blurOffsetY;
       ctx.shadowBlur = pixelSize;
@@ -218,6 +219,42 @@
     }
   }
 
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imageData.data;
+
+  function drawDensityWithCanvasImg(denMat) {
+    let px = 1;
+    let py = 1;
+    let cellX = 0;
+    let cellY = 0;
+    for (let i=0; i<=pixels.length; i+=4) {
+
+      const shadeRatio = 255;
+      const shade = denMat[cellX][cellY];
+      // const adjShade = ((shade-shadeRatio)*0.5)+shadeRatio;
+      const squareShade = (shadeRatio / (4*shade+1));
+      pixels[i] = squareShade;
+      pixels[i+1] = squareShade;
+      pixels[i+2] = 100;
+      pixels[i+3] = 255;
+      px += 1;
+      if (px > pixelSize) {
+        px = 1;
+        cellX += 1;
+        if (cellX > arrWidth-1) {
+          cellX = 0;
+          py += 1;
+          if (py > pixelSize) {
+            py = 1;
+            cellY += 1;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   function canvasCircle(x, y, radius) {
     ctx.beginPath();
     ctx.arc(
@@ -231,7 +268,11 @@
     const shadeRatio = 255;
     const squareShade = (shadeRatio / (radius+1));
     ctx.fillStyle = `rgb(${squareShade}, ${squareShade}, ${squareShade})`;
-    ctx.fillRect(x-pixelSize/2.0, y-pixelSize/2.0, pixelSize, pixelSize);
+    const atX = x-pixelSize/2.0;
+    const atY = y-pixelSize/2.0;
+    const roundedX = ~~(0.5+(atX));
+    const roundedY = ~~(0.5+(atY));
+    ctx.fillRect(atX, atY, pixelSize, pixelSize);
   }
 
   function canvasGradient(x, y, radius) {
@@ -241,8 +282,13 @@
 
   function drawParticles(particles) {
     particles.forEach(particle => {
-      ctx.fillStyle = 'red';
-      ctx.fillRect(particle.x, particle.y, 4, 4);
+      if (particle['img'] !== undefined) {
+        const img = particle.img;
+        ctx.drawImage(img, particle.x-(img.width/2), particle.y-(img.height/2));
+      } else {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(particle.x, particle.y, 3, 3);
+      }
     });
   }
 
@@ -253,6 +299,7 @@
   let dt = 0.002;
   const visc = 20;
   const denVelRatio = 0.45;
+  const gravity = 0.981
 
   const diffusionTest = {
     density: (x,y) => {
@@ -265,6 +312,7 @@
     denSource: function() { return 0; },
     uSource: function() { return 0; },
     vSource: function() { return 0; },
+    particlesSource: function() { return []; },
   };
   const advectionTest = {
     density: function() { return (Math.random())*0.2 },
@@ -272,11 +320,11 @@
     velocityV: (x,y) => { return Math.cos(-0.3*(x/pixelSize)*(y/pixelSize)-10)/-denVelRatio; },
     particles: () => {
       let ps = [
-        { x: 50,  y: 50,  xVel: 0, yVel: 0, decay: -80 },
-        { x: 150, y: 150, xVel: 0, yVel: 0, decay: -70 },
-        { x: 250, y: 50,  xVel: 0, yVel: 0, decay: -80 },
-        { x: 250, y: 150, xVel: 0, yVel: 0, decay: -60 },
-        { x: 450, y: 250, xVel: 0, yVel: 0, decay: -80 },
+        { x: 50,  y: (arrHeight*pixelSize)-30,  xVel: 1, yVel: -3, decay: 80 },
+        { x: 150, y: (arrHeight*pixelSize)-30, xVel: 1, yVel: -3, decay: 70 },
+        { x: 250, y: (arrHeight*pixelSize)-30,  xVel: 0, yVel: -2, decay: 80 },
+        { x: 250, y: (arrHeight*pixelSize)-30, xVel: 0, yVel: -1, decay: 60 },
+        { x: 450, y: (arrHeight*pixelSize)-30, xVel: 1, yVel: -1, decay: 80 },
       ];
       ps.forEach(particle => {
         particle.xVel = uState[Math.round(particle.x/pixelSize)][Math.round(particle.y/pixelSize)];
@@ -286,7 +334,8 @@
     },
     denSource: function() { return 0; },
     uSource: function() { return 0; },
-    vSource: function() { return 0; }
+    vSource: function() { return 0; },
+    particlesSource: function() { return []; },
   };
   const candleTest = {
     density: function(x,y) {
@@ -346,38 +395,34 @@
       return 0;
     },
     particles: function() {
-      const flame = document.querySelector('#flame1');
-      return [
-        { x: 50,  y: (arrHeight*pixelSize)-30,  xVel: 1, yVel: -3, decay: -80, gravity: -1, img: flame },
-      ];
+      return [];
     },
     denSource: function(x,y) {
       if (
         x >= Math.floor(arrWidth/2.0)-(arrWidth*0.1) &&
           x <= Math.floor(arrWidth/2.0)+(arrWidth*0.1) &&
           y >= arrHeight-(arrHeight*0.1)
-        ) { return 0.7; }
+        ) { return 10; }
       return 0;
     },
     uSource: (x,y) => {
-      return -0.6;
+      return -9;
     },
     vSource: (x,y) => {
       if (
         x >= Math.floor(arrWidth/2.0)-(arrWidth*0.1) &&
           x <= Math.floor(arrWidth/2.0)+(arrWidth*0.1) &&
           y >= arrHeight-(arrHeight*0.1)
-        ) { return -400; }
+        ) { return -900; }
       return 0;
     },
     particlesSource: function() {
       if (Math.random() > 0.1) { return []; }
-      // const flame = document.querySelector('#flame1');
       return [{ x: 490+(137*Math.random()),  y: 455-(7*Math.random()),  xVel: -4*Math.random(), yVel: -15*Math.random(), decay: 70, gravity: -1 }];
     }
   };
 
-  let template = candleTest;
+  let template = flameTest;
 
   let uState, vState, uPrev, vPrev, denState, denPrev, denInput, uInput, vInput, particles;
 
@@ -570,8 +615,8 @@
       const pAccelerationY = fluidDensity*impulseY + gravity*particle.gravity;
       particle.xVel += pAccelerationX;
       particle.yVel += pAccelerationY;
-      particle.x += particle.xVel ;
-      particle.y += particle.yVel ;
+      particle.x += particle.xVel;
+      particle.y += particle.yVel;
       particle.decay -= 1;
     }
   }
@@ -595,6 +640,23 @@
   function clickFromUser($event) {
     isMouseDown = true;
     addWindAt($event.offsetX,$event.offsetY);
+    // addExplosionAt($event.offsetX,$event.offsetY);
+  }
+
+  function addExplosionAt(eventX, eventY) {
+    const inputMult = 15000;
+    const pX = Math.floor(eventX/pixelSize);
+    const pY = Math.floor(eventY/pixelSize);
+    uInput[pX+1][pY] += 30*inputMult;
+    uInput[pX-1][pY] -= 30*inputMult;
+    vInput[pX][pY+1] += 30*inputMult;
+    vInput[pX][pY-1] -= inputMult;
+    particles.push(
+      { x: eventX, y: eventY,  xVel: 5*Math.random(), yVel: 5*Math.random(), decay: 40, gravity: 5 },
+      { x: eventX, y: eventY,  xVel: 5*Math.random(), yVel: -5*Math.random(), decay: 40, gravity: 5 },
+      { x: eventX, y: eventY,  xVel: -5*Math.random(), yVel: 5*Math.random(), decay: 70, gravity: 5 },
+      { x: eventX, y: eventY,  xVel: -5*Math.random(), yVel: -5*Math.random(), decay: 60, gravity: 5 }
+    )
   }
 
   function touchFromUser($event) {
@@ -650,7 +712,8 @@
   let tickMilliseconds = 0;
   let lifeCycleTimeout;
   let cycleCount = 0;
-  const trackPerformance = false;
+  let trackPerformance = false;
+  let advectStepSize = [];
   if (trackPerformance) {
     advectCallback = (i, i0, j, j0) => { advectStepSize.push(Math.max(i-i0, j-j0)); };
   }
@@ -666,7 +729,6 @@
     document.querySelector('#debugDiv').style.display ='flex';
     document.querySelector('#toggleDisplayCircles').style.display ='inline-block';
   }
-  let advectStepSize = [];
 
   function evolve(denState, denPrev, denInput) {
     if (trackPerformance) { performance.mark('evolve begin'); }
@@ -680,10 +742,12 @@
   const lifeCycle = function() {
     if (trackPerformance) { performance.mark('lifeCycle begin'); }
     evolve(denState, denPrev, denInput);
+    // drawCanvas();
     if (trackPerformance) { performance.mark('after drawCanvas'); }
-    drawDensityCircles(denState);
-    if (trackPerformance) { performance.mark('after drawDensityCircles'); }
-    if (debug && !displayCircles) { drawVelocityArrows(uPrev, vPrev); }
+    drawDensity(denState);
+    // drawDensityWithCanvasImg(denState);
+    if (trackPerformance) { performance.mark('after drawDensity'); }
+    if (drawVelocity && !displayCircles) { drawVelocityArrows(uPrev, vPrev); }
     drawParticles(particles);
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     matrixDeepCopyTo(denState, denPrev);
@@ -728,8 +792,8 @@
     performance.measure('velEvolve', 'evolve begin', 'after velEvolve');
     performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
     performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
-    performance.measure('drawDensity', 'after drawCanvas', 'after drawDensityCircles');
-    performance.measure('drawVelocityArrows', 'after drawDensityCircles', 'after drawVelocityArrows');
+    performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
+    performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
     performance.measure('frame time', 'lifeCycle begin', 'final marker');
     performance.clearMarks();
     if (cycleCount % 30 == 0) { printAndClearMeasures(); }
@@ -785,7 +849,7 @@
   function reset() {
     resetState();
     drawCanvas();
-    drawDensityCircles(denPrev, false);
+    drawDensity(denPrev, false);
     clearMatrix(denDiffStored);
     debug && drawVelocityArrows(uPrev, vPrev);
   }
