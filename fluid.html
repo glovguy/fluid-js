@@ -210,7 +210,7 @@
       }
     );
   }
-  setDitherLevel(4);
+  setDitherLevel(3);
 
   function drawDensity(denMat, optimize=true) {
     for (let i=0; i<arrWidth; i++) {
@@ -356,7 +356,7 @@
         x >= Math.floor(arrWidth/2.0)-(arrWidth/30) &&
           x <= Math.floor(arrWidth/2.0)+(arrWidth/30) &&
           y >= arrHeight-(arrHeight/30)
-        ) { return 1; }
+        ) { return 10; }
       return 0;
     },
     velocityV: (x,y) => {
@@ -427,7 +427,7 @@
     }
   };
 
-  let template = flameTest;
+  let template = candleTest;
 
   let uState, vState, uPrev, vPrev, denState, denPrev, denInput, uInput, vInput, particles;
 
