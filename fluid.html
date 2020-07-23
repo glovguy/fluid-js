@@ -187,16 +187,40 @@
     }
   }
 
+  const ditherMatrix = [
+    [ 1,  9,  3, 11],
+    [13,  5, 15,  7],
+    [ 4, 12,  2, 10],
+    [16,  8, 14,  6]
+  ];
+  let ditherThresholdMatrix = [
+    [ 1,  9,  3, 11],
+    [13,  5, 15,  7],
+    [ 4, 12,  2, 10],
+    [16,  8, 14,  6]
+  ];
+
+  function setDitherLevel(level) {
+    overwriteMatrix(
+      ditherThresholdMatrix,
+      function(x,y) {
+        let v = ditherMatrix[x][y];
+        v = v/17;
+        return v**level;
+      }
+    );
+  }
+  setDitherLevel(4);
+
   function drawDensity(denMat, optimize=true) {
     for (let i=0; i<arrWidth; i++) {
       for (let j=0; j<arrHeight; j++) {
-        const skipNum = (i+(j*arrWidth)+(cycleCount*7));
-        if (optimize) {
-          if (denDiffOptimize && (
-            skipNum%refreshAnywayRate !== 0 && skipNum%refreshAnywayRate2 !== 0 &&
-            Math.abs(denMat[i][j]-denDiffStored[i][j]) < denDiffReq)
+        if (optimize && denDiffOptimize) {
+          const threshold = ditherThresholdMatrix[(2*cycleCount*i)%4][(3*cycleCount*j)%4];
+          if (
+            Math.abs(denMat[i][j]-denDiffStored[i][j]) < (threshold)
           ) { continue; }
-          if (denDiffOptimize) { denDiffStored[i][j] = denMat[i][j]; }
+          denDiffStored[i][j] = denMat[i][j];
         }
         const denX = (i+1)*pixelSize-pixelSize/2.0;
         const denY = (j+1)*pixelSize-pixelSize/2.0;
@@ -694,6 +718,7 @@
   let lifeCycleTimeout;
   let cycleCount = 0;
   let trackPerformance = false;
+  let granularPerformance = false;
   let advectStepSize = [];
   if (trackPerformance) {
     advectCallback = (i, i0, j, j0) => { advectStepSize.push(Math.max(i-i0, j-j0)); };
@@ -722,14 +747,16 @@
   const lifeCycle = function() {
     if (trackPerformance) { performance.mark('lifeCycle begin'); }
     evolve(denState, denPrev, denInput);
+    if (trackPerformance) { performance.mark('after evolve'); }
     // drawCanvas();
     if (trackPerformance) { performance.mark('after drawCanvas'); }
     drawDensity(denState);
     // drawDensityWithCanvasImg(denState);
     if (trackPerformance) { performance.mark('after drawDensity'); }
     if (drawVelocity) { drawVelocityArrows(uPrev, vPrev); }
-    drawParticles(particles);
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
+    drawParticles(particles);
+    if (trackPerformance) { performance.mark('after drawParticles'); }
     matrixDeepCopyTo(denState, denPrev);
     matrixDeepCopyTo(uState, uPrev);
     matrixDeepCopyTo(vState, vPrev);
@@ -769,12 +796,17 @@
   }
 
   function makePerformanceMeasures() {
-    performance.measure('velEvolve', 'evolve begin', 'after velEvolve');
-    performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
-    performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
-    performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
-    performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
-    performance.measure('frame time', 'lifeCycle begin', 'final marker');
+    if (granularPerformance) {
+      performance.measure('velEvolve', 'evolve begin', 'after velEvolve');
+      performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
+      performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
+      performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
+      performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
+    } else {
+      performance.measure('sim time', 'evolve begin', 'after evolve');
+      performance.measure('draw time', 'after evolve', 'after drawParticles');
+    }
+    performance.measure('_frame time', 'lifeCycle begin', 'final marker');
     performance.clearMarks();
     if (cycleCount % 30 == 0) { printAndClearMeasures(); }
   }
@@ -790,7 +822,7 @@
       acc['counts'][measure.name] += 1;
       return acc;
     }, { durations: {}, counts: {} });
-    fps = Math.round((allSortedMeasures['counts']['frame time']*1000) / allSortedMeasures['durations']['frame time'] *100)/100;
+    fps = Math.round((allSortedMeasures['counts']['_frame time']*1000) / allSortedMeasures['durations']['_frame time'] *100)/100;
     measuresForDisplay = {
       '_fps_': `${fps} frame / sec`
     };
