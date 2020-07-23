@@ -10,7 +10,6 @@
   <div id="control-buttons">
     <button onclick="reset();">Reset</button>
     <button onclick="pauseOrPlay();" id="pauseOrPlay">Pause</button>
-    <button onclick="toggleDisplayCircles();" id="toggleDisplayCircles" style="display: none;">Change Display</button>
   </div>
   <div id="debugDiv" style="display: none; margin: 40px; text-align: left; font-size: 14px;"><p>
     Number of pixels: <span id="pixelCount"></span><br />
@@ -145,7 +144,6 @@
   const Ny = arrHeight-2;
   document.querySelector("#pixelCount").innerText = Nx*Ny;
 
-  let displayCircles = false;
   let drawVelocity = false;
   const blurOffsetY = canvas.height + 1000;
 
@@ -190,13 +188,6 @@
   }
 
   function drawDensity(denMat, optimize=true) {
-    if (displayCircles) {
-      ctx.shadowOffsetY = blurOffsetY;
-      ctx.shadowBlur = pixelSize;
-      ctx.shadowColor = 'rgba(0,0,0,1)';
-      ctx.beginPath();
-      ctx.fillStyle = 'rgba(0,0,0,1)';
-    }
     for (let i=0; i<arrWidth; i++) {
       for (let j=0; j<arrHeight; j++) {
         const skipNum = (i+(j*arrWidth)+(cycleCount*7));
@@ -210,15 +201,10 @@
         const denX = (i+1)*pixelSize-pixelSize/2.0;
         const denY = (j+1)*pixelSize-pixelSize/2.0;
         const denSize = denMat[i][j]*10 / denVelRatio;
-        displayCircles ? canvasGradient(denX, denY, denSize) : canvasShadedSquare(denX, denY, denSize);
+        canvasShadedSquare(denX, denY, denSize);
       }
     }
-    if (displayCircles) {
-      ctx.closePath();
-      ctx.fill();
-    }
   }
-
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = imageData.data;
@@ -273,11 +259,6 @@
     const roundedX = ~~(0.5+(atX));
     const roundedY = ~~(0.5+(atY));
     ctx.fillRect(atX, atY, pixelSize, pixelSize);
-  }
-
-  function canvasGradient(x, y, radius) {
-    ctx.moveTo(x, y);
-    ctx.arc(x, y-blurOffsetY, radius*2.0*pixelSize/20.0, 0, Math.PI * 2, true );
   }
 
   function drawParticles(particles) {
@@ -727,7 +708,6 @@
   let debug = false;
   if (debug) {
     document.querySelector('#debugDiv').style.display ='flex';
-    document.querySelector('#toggleDisplayCircles').style.display ='inline-block';
   }
 
   function evolve(denState, denPrev, denInput) {
@@ -747,7 +727,7 @@
     drawDensity(denState);
     // drawDensityWithCanvasImg(denState);
     if (trackPerformance) { performance.mark('after drawDensity'); }
-    if (drawVelocity && !displayCircles) { drawVelocityArrows(uPrev, vPrev); }
+    if (drawVelocity) { drawVelocityArrows(uPrev, vPrev); }
     drawParticles(particles);
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
     matrixDeepCopyTo(denState, denPrev);
@@ -819,13 +799,6 @@
     });
     console.table(measuresForDisplay);
     performance.clearMeasures();
-  }
-
-  function toggleDisplayCircles() {
-    displayCircles = !displayCircles;
-    if (displayCircles) {
-      denDiffOptimize = false;
-    }
   }
 
   function pauseOrPlay() {
