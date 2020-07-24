@@ -12,13 +12,18 @@
     <button onclick="pauseOrPlay();" id="pauseOrPlay">Pause</button>
   </div>
   <div id="debugDiv" style="display: none; margin: 40px; text-align: left; font-size: 14px;"><p>
-    Number of pixels: <span id="pixelCount"></span><br />
-    Average Advect Step Size: <span id="averageAdvectStepSizeSpan"></span><br />
-    Frame per Second: <span id="fpsSpan"></span><br />
-    Physics Cycles per Second: <span id="cyclePerSecondSpan"></span> (cycle / second)<br />
-    Viscosity Diffusion Rate per second: <span id="viscosityDiffusionRateSpan"></span><br />
-    Average velocity magnitude: <span id="averageVelocity"></span><br />
-    Density (best b/t 0 and 1) avg: <span id="avgDensity"></span>, min: <span id="minDensity"></span>, max: <span id="maxDensity"></span><br />
+    <div style="width: 220px;">
+      Number of pixels: <span id="pixelCount"></span><br />
+      Frame per Second: <span id="fpsSpan"></span><br />
+    </div>
+    <ul style="margin-top: 0px;">
+      <li>Total Frame Time: <span id="frameTimeSpan"></span><br />
+        <ul>
+          <li>Sim Time: <span id="simTimeSpan"></span><br /></li>
+          <li>Draw Time: <span id="drawTimeSpan"></span><br /></li>
+        </ul>
+      </li>
+    </ul>
   </p></div>
 </div>
 
@@ -59,7 +64,7 @@
   function initMatrix(x,y,val=function() { return 0; }) {
     const matrix = [];
     for(var i=0; i<x; i++) {
-      let innerMat = new Float64Array(y);
+      let innerMat = new Array(y);
       for (let j=0; j<y; j++) {
         innerMat[j] = val(i,j);
       }
@@ -761,32 +766,11 @@
     matrixDeepCopyTo(uState, uPrev);
     matrixDeepCopyTo(vState, vPrev);
     if (debug) {
-      const averageAdvectStepSize = Math.round(100*advectStepSize.reduce((a, b) => a + b, 0) / (advectStepSize.length))/100;
-      // Adjust denVelRatio until this this is correct
-      document.querySelector('#averageAdvectStepSizeSpan').innerHTML = `${averageAdvectStepSize} (should be between 1 and ${arrWidth/3.0})`;
-      advectStepSize = [];
       document.querySelector('#fpsSpan').innerHTML = measuresForDisplay['_fps_'];
-      document.querySelector('#cyclePerSecondSpan').innerHTML = fps;
       const avgViscDiff = dt*visc*fps;
-      document.querySelector('#viscosityDiffusionRateSpan').innerHTML = avgViscDiff;
-      if (cycleCount % 30 ==0) {
-        velTotal = 0;
-        denTotal = 0;
-        denMin = 0;
-        denMax = 0;
-        for (let i=0; i <= Nx; i++) {
-          for (let j=0; j <= Ny; j++) {
-            velTotal += Math.sqrt(uState[i][j]*uState[i][j] + vState[i][j]*vState[i][j]);
-            denTotal += denState[i][j];
-            if (denState[i][j] < denMin) { denMin = denState[i][j]; }
-            if (denState[i][j] > denMax) { denMax = denState[i][j]; }
-          }
-        }
-        document.querySelector('#averageVelocity').innerHTML = velTotal / (Nx*Ny);
-        document.querySelector('#avgDensity').innerHTML = denTotal / (Nx*Ny);
-        document.querySelector('#minDensity').innerHTML = denMin;
-        document.querySelector('#maxDensity').innerHTML = denMax;
-      }
+      document.querySelector('#simTimeSpan').innerHTML = measuresForDisplay['sim time'];
+      document.querySelector('#drawTimeSpan').innerHTML = measuresForDisplay['draw time'];
+      document.querySelector('#frameTimeSpan').innerHTML = measuresForDisplay['_frame time'];
     }
     advectStepSize = [];
     if (trackPerformance) { performance.mark('final marker'); }
@@ -827,7 +811,8 @@
       '_fps_': `${fps} frame / sec`
     };
     Object.keys(allSortedMeasures['durations']).forEach(key => {
-      measuresForDisplay[key] = `${allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key]} milliseconds`;
+      console.log(allSortedMeasures['durations'][key])
+      measuresForDisplay[key] = `${(allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key]).toFixed(3)} ms`;
     });
     console.table(measuresForDisplay);
     performance.clearMeasures();
