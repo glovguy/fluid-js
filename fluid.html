@@ -222,7 +222,7 @@
     for (let i=0; i<arrWidth; i++) {
       for (let j=0; j<arrHeight; j++) {
         if (optimize && denDiffOptimize) {
-          const threshold = ditherThresholdMatrix[(2*cycleCount*i)%4][(3*cycleCount*j)%4];
+          const threshold = ditherThresholdMatrix[(cycleCount*i)%4][(cycleCount*j)%4];
           if (
             Math.abs(denMat[i][j]-denDiffStored[i][j]) < (threshold)
           ) { continue; }
@@ -497,6 +497,7 @@
     set_bnd ( b, d );
   }
 
+  const projAccuracy = Math.floor((Nx*Ny)/100); // This worked. Should be b/t 20..60
   function project(Nx, Ny, u, v, p, div) {
     const NN = (Nx+Ny)/2.0;
     const h = 1.0/(NN);
@@ -511,8 +512,7 @@
     }
     set_bnd ( 0, div );
     set_bnd ( 0, p );
-    const accuracy = Math.floor((Nx*Ny)/100); // This worked. Should be b/t 20..60
-    for ( let k=0; k<accuracy; k++) {
+    for ( let k=0; k<projAccuracy; k++) {
       for ( let i=1; i<=Nx; i++ ) {
         for ( let j=1; j<=Ny; j++ ) {
           p[i][j] = (
@@ -593,18 +593,22 @@
   }
 
   function vel_evolve(Nx, Ny, visc, dt, uState, vState, uPrev, vPrev, uInput, vInput) {
+    if (trackPerformance) { performance.mark('vel_evolve start'); }
     swap(uState, uPrev);
     swap(vState, vPrev);
     add_source(uPrev, uInput, dt);
     add_source(vPrev, vInput, dt);
     overwriteMatrix(uInput, template.uSource);
     overwriteMatrix(vInput, template.vSource);
+    if (trackPerformance) { performance.mark('vel_evolve after swp n src n overwrite'); }
     diffuse(Nx, Ny, 1, uState, uPrev, visc, dt);
     diffuse(Nx, Ny, 2, vState, vPrev, visc, dt);
+    if (trackPerformance) { performance.mark('vel_evolve after diffuse'); }
     swap(uPrev, uState);
     swap(vPrev, vState);
     advect(Nx, Ny, 1, uState, uPrev, uPrev, vPrev, dt);
     advect(Nx, Ny, 2, vState, vPrev, uPrev, vPrev, dt);
+    if (trackPerformance) { performance.mark('vel_evolve after swp n advect'); }
     project(Nx, Ny, uState, vState, uPrev, vPrev);
   }
 
@@ -783,10 +787,16 @@
   function makePerformanceMeasures() {
     if (granularPerformance) {
       performance.measure('velEvolve', 'evolve begin', 'after velEvolve');
+      performance.measure('vEv 1. swp n src n overwrite', 'vel_evolve start', 'vel_evolve after swp n src n overwrite');
+      performance.measure('vEv 2. diffuse', 'vel_evolve after swp n src n overwrite', 'vel_evolve after diffuse');
+      performance.measure('vEv 3. swp n advect', 'vel_evolve after diffuse', 'vel_evolve after swp n advect');
+      performance.measure('vEv 4. project', 'vel_evolve after swp n advect', 'after velEvolve');
       performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
-      performance.measure('drawCanvas', 'after velEvolve', 'after drawCanvas');
-      performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
-      performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
+      // performance.measure('drawCanvas', 'after evolve', 'after drawCanvas');
+      // performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
+      // performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
+      // performance.measure('drawParticles', 'after drawVelocityArrows', 'after drawParticles');
+      // performance.measure('misc', 'after drawParticles', 'final marker');
     } else {
       performance.measure('sim time', 'evolve begin', 'after evolve');
       performance.measure('draw time', 'after evolve', 'after drawParticles');
