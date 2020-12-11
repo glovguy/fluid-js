@@ -19,9 +19,14 @@ const int size=(N+2)*(N+2);
 bool init=false;
 int t=0;
 SDL_Surface *screen;
+
+// Set bnd_offset to 0 if you don't want boundary squares to display, 1 if you do
+// int bnd_offset = 0;
+int bnd_offset = 1;
+
 int canvas_width = 456;
 int canvas_height = 456;
-int pixel_size = fmin(canvas_width, canvas_height)/N;
+int pixel_size = fmin(canvas_width, canvas_height)/(N+(2*bnd_offset));
 
 float u[size], v[size], u_prev[size], v_prev[size];
 float dens[size], dens_prev[size];
@@ -48,10 +53,10 @@ void draw_dens(int N, float dens[size]) {
       int alpha = (i+j) % 255;
 #endif
 
-      int pixel_x = (i / pixel_size);
-      int pixel_y = (j / pixel_size);
+      int pixel_x = (i / pixel_size)+(1-bnd_offset);
+      int pixel_y = (j / pixel_size)+(1-bnd_offset);
       int shade;
-      if (pixel_x > N || pixel_y > N) {
+      if (pixel_x > N+2 || pixel_y > N+2) {
         shade = 255;
       } else {
         shade = 255*dens[IX(pixel_x,pixel_y)];
