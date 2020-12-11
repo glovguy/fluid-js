@@ -314,6 +314,7 @@
 
   let dt = 0.002;
   const visc = 20;
+  const diff = 20;
   const denVelRatio = 0.45;
   const gravity = 0.981
 
@@ -588,11 +589,11 @@
 
   let advectCallback;
 
-  function densityEvolve(Nx, Ny, visc, dt, denState, denPrev, denInput) {
+  function densityEvolve(Nx, Ny, diff, dt, denState, denPrev, denInput) {
     add_source(denPrev, denInput, dt);
     overwriteMatrix(denInput, template.denSource);
     swap(denState, denPrev);
-    diffuse(Nx, Ny, 0, denState, denPrev, visc, dt);
+    diffuse(Nx, Ny, 0, denState, denPrev, diff, dt);
     swap(denState, denPrev);
     advect(Nx, Ny, 0, denState, denPrev, uState, vState, dt, advectCallback);
   }
@@ -753,7 +754,7 @@
     if (trackPerformance) { performance.mark('evolve begin'); }
     vel_evolve(Nx, Ny, visc, dt, uState, vState, uPrev, vPrev, uInput, vInput);
     if (trackPerformance) { performance.mark('after velEvolve'); }
-    densityEvolve(Nx, Ny, visc, dt, denState, denPrev, denInput);
+    densityEvolve(Nx, Ny, diff, dt, denState, denPrev, denInput);
     if (trackPerformance) { performance.mark('after densityEvolve'); }
     particles_evolve(particles, uState, vState);
   }
@@ -777,8 +778,10 @@
     if (debug) {
       document.querySelector('#fpsSpan').innerHTML = measuresForDisplay['_fps_'];
       const avgViscDiff = dt*visc*fps;
-      document.querySelector('#simTimeSpan').innerHTML = measuresForDisplay['sim time'];
-      document.querySelector('#drawTimeSpan').innerHTML = measuresForDisplay['draw time'];
+      if (!granularPerformance) {
+        document.querySelector('#simTimeSpan').innerHTML = measuresForDisplay['sim time'];
+        document.querySelector('#drawTimeSpan').innerHTML = measuresForDisplay['draw time'];
+      }
       document.querySelector('#frameTimeSpan').innerHTML = measuresForDisplay['_frame time'];
     }
     advectStepSize = [];
