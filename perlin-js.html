@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="text-align:center; margin-left:auto; margin-right:auto;">
+
+  <canvas id="draw" style="cursor: move; border-radius: 1px; border-style: dotted;"></canvas>
+<script>
+  const canvas = document.querySelector('#draw');
+  const ctx = canvas.getContext('2d');
+  if (window.innerWidth >= 1200) {
+    canvas.width = 1200;
+    canvas.height = 492;
+  } else if (window.innerWidth >= 768) {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+  } else {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+  }
+
+  const requestAnimFrame = ((callback) => {
+    // return window.requestAnimationFrame  ||
+    //   window.webkitRequestAnimationFrame  ||
+    //   window.mozRequestAnimationFrame     ||
+    return function(callback) {
+        window.setTimeout(callback, 100);
+      };
+  })();
+
+  const cancelAnimFrame = function() {
+    window.cancelAnimationFrame(lifeCycleTimeout);
+  }
+
+  const clamp = function(num, min, max) { 
+    return Math.min(Math.max(num, min), max);
+  }
+
+  function smootherstep(x) {
+    return 6*x**5 - 15*x**4 + 10*x**3;
+  }
+
+  function rand_vect() {
+    const theta = Math.random() * 2 * Math.PI;
+    return { x: Math.cos(theta), y: Math.sin(theta) };
+  }
+
+  function gradient(x,y,gradients) {
+    if (gradients[[x,y]]) return gradients[[x,y]];
+    g_vect = rand_vect();
+    gradients[[x, y]] = g_vect;
+    return g_vect
+  }
+
+  const dot_prod_grid = function(x, y, vx, vy, gradients) {
+    const g_vect = gradient(vx, vy, gradients);
+    return (x - vx) * g_vect.x + (y - vy) * g_vect.y;
+  }
+
+  function interp(x, a, b) {
+    return a + smootherstep(x) * (b-a);
+  }
+
+  // Special thanks to https://github.com/joeiddon/perlin
+  function perlin(scale=1) {
+    gradients = [];
+    return function(x,y) {
+      x *= scale;
+      y *= scale;
+      // if (memory.hasOwnProperty([x,y]))
+      //     return memory[[x,y]];
+      const xf = Math.floor(x);
+      const yf = Math.floor(y);
+      const tl = dot_prod_grid(x, y, xf,   yf, gradients);
+      const tr = dot_prod_grid(x, y, xf+1, yf, gradients);
+      const bl = dot_prod_grid(x, y, xf,   yf+1, gradients);
+      const br = dot_prod_grid(x, y, xf+1, yf+1, gradients);
+      const xt = interp(x-xf, tl, tr);
+      const xb = interp(x-xf, bl, br);
+      const v = interp(y-yf, xt, xb);
+      // memory[[x,y]] = v;
+      return v;
+    }
+  }
+
+  const generateStaticFn = function(n=16) {
+    const cache = [];
+    const cl = n*n;
+    return function(x,y) {
+      const coord = (x+(n*y)) % cl;
+      if (cache[coord]) return cache[coord];
+      const value = Math.random();
+      cache[coord] = value;
+      return value;
+    }
+  }
+
+  let pixelSize = 4;
+  const p1 = perlin(0.06);
+  const p2 = perlin(0.16);
+  const pl = function(x,y) { return p1(x,y) + (0.8*p2(x,y)); }
+  let st = generateStaticFn();
+
+  function canvasShadedSquare(x, y, ss) {
+    if (ss === 0) {
+      return;
+    } else {
+      ctx.fillStyle = `rgba(255, ${interp(ss, 204, 32)}, 0, ${interp(ss, 250, 10)})`;
+    }
+    const atX = x-pixelSize/2.0;
+    const atY = y-pixelSize/2.0;
+    ctx.fillRect(atX, atY, pixelSize, pixelSize);
+  }
+
+  function drawDensity() {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, 64*pixelSize, 64*pixelSize);
+    for (let i=0; i<64; i++) {
+      for (let j=0; j<64; j++) {
+        const denX = (i+1)*pixelSize-pixelSize/2.0;
+        const denY = (j+1)*pixelSize-pixelSize/2.0;
+        const denSize = clamp((0.3*st(i,j))+pl(i,j), 0, 1);
+        canvasShadedSquare(denX, denY, denSize);
+      }
+    }
+  }
+
+  function cycle() {
+    drawDensity();
+    st = generateStaticFn();
+    requestAnimFrame(cycle);
+  }
+  cycle();
+
+</script>
+
+</body>
+</html>
