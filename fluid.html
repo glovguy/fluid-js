@@ -241,24 +241,28 @@
     }
   }
 
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const pixels = imageData.data;
+  let pixels;
+  let imageData;
 
   function drawDensityWithCanvasImg(denMat) {
+    if (trackPerformance) { performance.mark('drawDensityWithCanvasImg start'); }
+    if (imageData === undefined) { imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+    pixels = imageData.data;
+    
     let px = 1;
     let py = 1;
     let cellX = 0;
     let cellY = 0;
+    if (trackPerformance) { performance.mark('canvasImg for loop start'); }
     for (let i=0; i<=pixels.length; i+=4) {
-
       const shadeRatio = 255;
       const shade = denMat[cellX][cellY];
-      // const adjShade = ((shade-shadeRatio)*0.5)+shadeRatio;
       const squareShade = (shadeRatio / (4*shade+1));
       pixels[i] = squareShade;
       pixels[i+1] = squareShade;
-      pixels[i+2] = 100;
+      pixels[i+2] = squareShade;
       pixels[i+3] = 255;
+      
       px += 1;
       if (px > pixelSize) {
         px = 1;
@@ -273,6 +277,7 @@
         }
       }
     }
+    if (trackPerformance) { performance.mark('canvasImg putImageData start'); }
     ctx.putImageData(imageData, 0, 0);
   }
 
@@ -291,8 +296,6 @@
     ctx.fillStyle = `rgb(${squareShade}, ${squareShade}, ${squareShade})`;
     const atX = x-pixelSize/2.0;
     const atY = y-pixelSize/2.0;
-    const roundedX = ~~(0.5+(atX));
-    const roundedY = ~~(0.5+(atY));
     ctx.fillRect(atX, atY, pixelSize, pixelSize);
   }
 
@@ -551,11 +554,11 @@
       // x[Nx+1][j] = (b==1) ? Math.min(x[Nx][j],0) : x[Nx][j];
       // x[Nx+1][j] = (b==1) ? -x[Nx][j] : x[Nx][j];
       if (b==1) {
-        x[0][j] = 0.333*(-x[1][j] + x[0][j+1] + x[0][j-1]);
-        x[Nx+1][j] = 0.333*(-x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
+        x[0][j] = (1/3)*(-x[1][j] + x[0][j+1] + x[0][j-1]);
+        x[Nx+1][j] = (1/3)*(-x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
       } else {
-        x[0][j] = 0.333*(x[1][j] + x[0][j+1] + x[0][j-1]);
-        x[Nx+1][j] = 0.333*(x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
+        x[0][j] = (1/3)*(x[1][j] + x[0][j+1] + x[0][j-1]);
+        x[Nx+1][j] = (1/3)*(x[Nx][j] + x[Nx+1][j+1] + x[Nx+1][j-1]);
       }
     }
     for ( let i=1; i<=Nx; i++ ) {
@@ -566,11 +569,11 @@
       // x[i][Ny+1] = (b==2) ? Math.min(x[i][Ny],0) : x[i][Ny];
       // x[i][Ny+1] = (b==2) ? -x[i][Ny] : x[i][Ny];
       if (b==2) {
-        x[i][0] = 0.333*(-x[i][1] + x[i+1][0] + x[i-1][0]);
-        x[i][Ny+1] = 0.333*(-x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
+        x[i][0] = (1/3)*(-x[i][1] + x[i+1][0] + x[i-1][0]);
+        x[i][Ny+1] = (1/3)*(-x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
       } else {
-        x[i][0] = 0.333*(x[i][1] + x[i+1][0] + x[i-1][0]);
-        x[i][Ny+1] = 0.333*(x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
+        x[i][0] = (1/3)*(x[i][1] + x[i+1][0] + x[i-1][0]);
+        x[i][Ny+1] = (1/3)*(x[i][Ny] + x[i+1][Ny+1] + x[i-1][Ny+1]);
       }
     }
     x[0][0] = 0.5*(x[1][0]+x[0][1]);
@@ -765,8 +768,8 @@
     if (trackPerformance) { performance.mark('after evolve'); }
     // drawCanvas();
     if (trackPerformance) { performance.mark('after drawCanvas'); }
-    drawDensity(denState);
-    // drawDensityWithCanvasImg(denState);
+    // drawDensity(denState);
+    drawDensityWithCanvasImg(denState);
     if (trackPerformance) { performance.mark('after drawDensity'); }
     if (drawVelocity) { drawVelocityArrows(uPrev, vPrev); }
     if (trackPerformance) { performance.mark('after drawVelocityArrows'); }
@@ -799,7 +802,10 @@
       performance.measure('vEv 3. swp n advect', 'vel_evolve after diffuse', 'vel_evolve after swp n advect');
       performance.measure('vEv 4. project', 'vel_evolve after swp n advect', 'after velEvolve');
       performance.measure('densityEvolve', 'after velEvolve','after densityEvolve');
-      // performance.measure('drawCanvas', 'after evolve', 'after drawCanvas');
+      performance.measure('drawCanvasImg', 'after evolve', 'after drawDensity');
+      performance.measure('drwCnvsImg setup', 'drawDensityWithCanvasImg start', 'canvasImg for loop start');
+      performance.measure('drwCnvsImg for loop', 'canvasImg for loop start', 'canvasImg putImageData start');
+      performance.measure('drwCnvsImg putImageData', 'canvasImg putImageData start', 'after drawDensity');
       // performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
       // performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
       // performance.measure('drawParticles', 'after drawVelocityArrows', 'after drawParticles');
