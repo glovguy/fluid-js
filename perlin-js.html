@@ -60,19 +60,19 @@
   }
 
   // Special thanks to https://github.com/joeiddon/perlin
-  function perlin(scale=1) {
-    gradients = [];
-    return function(x,y) {
-      x *= scale;
-      y *= scale;
+  function perlin(scale=0.1, bnd=function() { return false; }) {
+    const gradients = [];
+    return function(xi,yi) {
+      x = xi*scale;
+      y = yi*scale;
       // if (memory.hasOwnProperty([x,y]))
       //     return memory[[x,y]];
       const xf = Math.floor(x);
       const yf = Math.floor(y);
-      const tl = dot_prod_grid(x, y, xf,   yf, gradients);
-      const tr = dot_prod_grid(x, y, xf+1, yf, gradients);
-      const bl = dot_prod_grid(x, y, xf,   yf+1, gradients);
-      const br = dot_prod_grid(x, y, xf+1, yf+1, gradients);
+      const tl = bnd((1/scale)*xf,    (1/scale)*yf    ) ? -0.4 : dot_prod_grid(x, y, xf,   yf, gradients);
+      const tr = bnd((1/scale)*(xf+1),(1/scale)*yf    ) ? -0.4 : dot_prod_grid(x, y, xf+1, yf, gradients);
+      const bl = bnd((1/scale)*xf,    (1/scale)*(yf+1)) ? -0.4 : dot_prod_grid(x, y, xf,   yf+1, gradients);
+      const br = bnd((1/scale)*(xf+1),(1/scale)*(yf+1)) ? -0.4 : dot_prod_grid(x, y, xf+1, yf+1, gradients);
       const xt = interp(x-xf, tl, tr);
       const xb = interp(x-xf, bl, br);
       const v = interp(y-yf, xt, xb);
@@ -94,8 +94,14 @@
   }
 
   let pixelSize = 4;
-  const p1 = perlin(0.06);
-  const p2 = perlin(0.16);
+  const nm = 32;
+  const boundaries = function(x,y) {
+    if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
+    return false;
+  }
+  const p1 = perlin(0.06,boundaries);
+  let p2 = perlin(0.14,boundaries);
+  let p3 = perlin(0.14,boundaries);
   const pl = function(x,y) { return p1(x,y) + (0.8*p2(x,y)); }
   let st = generateStaticFn();
 
@@ -112,9 +118,9 @@
 
   function drawDensity() {
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, 64*pixelSize, 64*pixelSize);
-    for (let i=0; i<64; i++) {
-      for (let j=0; j<64; j++) {
+    ctx.fillRect(0, 0, nm*pixelSize, nm*pixelSize);
+    for (let i=0; i<nm; i++) {
+      for (let j=0; j<nm; j++) {
         const denX = (i+1)*pixelSize-pixelSize/2.0;
         const denY = (j+1)*pixelSize-pixelSize/2.0;
         const denSize = clamp((0.3*st(i,j))+pl(i,j), 0, 1);
@@ -126,6 +132,7 @@
   function cycle() {
     drawDensity();
     st = generateStaticFn();
+    p2 = perlin(0.12,boundaries);
     requestAnimFrame(cycle);
   }
   cycle();
