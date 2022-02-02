@@ -3,9 +3,12 @@
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
   <canvas id="draw" style="cursor: move; border-radius: 1px; border-style: dotted;"></canvas>
+  <p><span id="fps-span"></span></p>
+  
 <script>
   const canvas = document.querySelector('#draw');
-  const ctx = canvas.getContext('2d');
+  const fpsSpan = document.querySelector('#fps-span');
+  const drawContext = canvas.getContext('2d');
   if (window.innerWidth >= 1200) {
     canvas.width = 1200;
     canvas.height = 492;
@@ -18,11 +21,11 @@
   }
 
   const requestAnimFrame = ((callback) => {
-    // return window.requestAnimationFrame  ||
-    //   window.webkitRequestAnimationFrame  ||
-    //   window.mozRequestAnimationFrame     ||
-    return function(callback) {
-        window.setTimeout(callback, 100);
+    return window.requestAnimationFrame  ||
+      window.webkitRequestAnimationFrame  ||
+      window.mozRequestAnimationFrame     ||
+      function(callback) {
+        window.setTimeout(callback, 0);
       };
   })();
 
@@ -81,6 +84,16 @@
     }
   }
 
+  function randn_bm() {
+    let u = 0, v = 0;
+    while(u === 0) u = Math.random(); //Converting [0,1) to (0,1)
+    while(v === 0) v = Math.random();
+    let num = Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+    num = num / 10.0 + 0.5; // Translate to 0 -> 1
+    if (num > 1 || num < 0) return randn_bm() // resample between 0 and 1
+    return num
+  }
+
   const generateStaticFn = function(n=16) {
     const cache = [];
     const cl = n*n;
@@ -93,46 +106,154 @@
     }
   }
 
-  let pixelSize = 4;
-  const nm = 32;
-  const boundaries = function(x,y) {
-    if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
-    return false;
-  }
-  const p1 = perlin(0.06,boundaries);
-  let p2 = perlin(0.14,boundaries);
-  let p3 = perlin(0.14,boundaries);
-  const pl = function(x,y) { return p1(x,y) + (0.8*p2(x,y)); }
-  let st = generateStaticFn();
-
-  function canvasShadedSquare(x, y, ss) {
-    if (ss === 0) {
-      return;
-    } else {
-      ctx.fillStyle = `rgba(255, ${interp(ss, 204, 32)}, 0, ${interp(ss, 250, 10)})`;
+  // let pixelSize = 8;
+  // const nm = 32;
+  // const boundaries = function(x,y) {
+  //   if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
+  //   return false;
+  // }
+  // let p1a = perlin(0.06,boundaries);
+  // let p1b = perlin(0.06,boundaries);
+  // let p2 = perlin(0.14,boundaries);
+  // let p3a = perlin(0.14,boundaries);
+  // let p3b = perlin(0.14,boundaries);
+  // let st = generateStaticFn();
+  
+  // let aorb = 0;
+  // const pl = function(x,y) { return (aorb*p1b(x,y)) + ((1-aorb)*p1a(x,y)) + (0.8*p2(x,y))  + (0.3*st(x,y)) + (aorb*0.8*p3b(x,y)) + ((1-aorb)*0.8*p3a(x,y)); }
+  
+  const flame = function() {
+    this.pixelSize = 8;
+    const nm = 32;
+    this.boundaries = function(x,y) {
+      // console.log(this)
+      // throw 'r'
+      if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
+      return false;
     }
-    const atX = x-pixelSize/2.0;
-    const atY = y-pixelSize/2.0;
-    ctx.fillRect(atX, atY, pixelSize, pixelSize);
-  }
+    this.p1a = perlin(0.06,this.boundaries);
+    this.p1b = perlin(0.06,this.boundaries);
+    this.p2 = perlin(0.14,this.boundaries);
+    this.p3a = perlin(0.14,this.boundaries);
+    this.p3b = perlin(0.14,this.boundaries);
+    this.st = generateStaticFn();
+    // this.pl = function(x,y) { return (aorb*p1b(x,y)) + ((1-aorb)*p1a(x,y)) + (0.8*p2(x,y))  + (0.3*st(x,y)) + (aorb*0.8*p3b(x,y)) + ((1-aorb)*0.8*p3a(x,y)); }
 
-  function drawDensity() {
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, nm*pixelSize, nm*pixelSize);
-    for (let i=0; i<nm; i++) {
-      for (let j=0; j<nm; j++) {
-        const denX = (i+1)*pixelSize-pixelSize/2.0;
-        const denY = (j+1)*pixelSize-pixelSize/2.0;
-        const denSize = clamp((0.3*st(i,j))+pl(i,j), 0, 1);
-        canvasShadedSquare(denX, denY, denSize);
+    this.draw = function(ctx) {
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, nm*this.pixelSize, nm*this.pixelSize);
+      for (let i=0; i<nm; i++) {
+        for (let j=0; j<nm; j++) {
+          const denX = (i+1)*this.pixelSize-this.pixelSize/2.0;
+          const denY = (j+1)*this.pixelSize-this.pixelSize/2.0;
+          const denSize = clamp(this.pl(i,j), 0, 1);
+          this.canvasShadedSquare(ctx, denX, denY, denSize);
+        }
       }
     }
+
+    this.canvasShadedSquare = function(ctx, x, y, ss) {
+      if (ss === 0) return;
+
+      ctx.fillStyle = `rgba(255, ${interp(ss, 204, 32)}, 0, ${interp(ss, 250, 10)})`;
+      const atX = x-this.pixelSize/2.0;
+      const atY = y-this.pixelSize/2.0;
+      ctx.fillRect(atX, atY, this.pixelSize, this.pixelSize);
+    }
+
+    this.tick = function(tickMs) {
+      
+      this.aorb += tickMs*0.005; //0.04;
+      if (this.aorb >= 1) {
+        this.aorb -= 1;
+        this.p1a = this.p1b;
+        this.p3a = this.p3b;
+        this.p1b = perlin(0.06,this.boundaries);
+        this.p3b = perlin(0.14,this.boundaries);
+      }
+      if (this.aorb % 3 === 0) this.st = generateStaticFn();
+    }
+
+    this.aorb = 0;
+    this.pl = function(x,y) { 
+      return (
+        this.aorb*this.p1b(x,y)) +
+        ((1-this.aorb)*this.p1a(x,y)) +
+        (0.8*this.p2(x,y)) +
+        (0.3*this.st(x,y)) +
+        (this.aorb*0.8*this.p3b(x,y)) +
+        ((1-this.aorb)*0.8*this.p3a(x,y)
+      ); 
+    }
   }
 
+  // function canvasShadedSquare(x, y, ss) {
+  //   if (ss === 0) {
+  //     return;
+  //   } else {
+  //     ctx.fillStyle = `rgba(255, ${interp(ss, 204, 32)}, 0, ${interp(ss, 250, 10)})`;
+  //   }
+  //   const atX = x-pixelSize/2.0;
+  //   const atY = y-pixelSize/2.0;
+  //   ctx.fillRect(atX, atY, pixelSize, pixelSize);
+  // }
+
+  // function drawDensity() {
+  //   ctx.fillStyle = 'white';
+  //   ctx.fillRect(0, 0, nm*pixelSize, nm*pixelSize);
+  //   for (let i=0; i<nm; i++) {
+  //     for (let j=0; j<nm; j++) {
+  //       const denX = (i+1)*pixelSize-pixelSize/2.0;
+  //       const denY = (j+1)*pixelSize-pixelSize/2.0;
+  //       const denSize = clamp(pl(i,j), 0, 1);
+  //       canvasShadedSquare(denX, denY, denSize);
+  //     }
+  //   }
+  // }
+
+  function printAndClearMeasures() {
+    const allEntries = performance.getEntriesByType("measure");
+    const allSortedMeasures = allEntries.reduce((acc, measure) => {
+      if (acc['durations'][measure.name] === undefined) {
+        acc['durations'][measure.name] = 0;
+        acc['counts'][measure.name] = 0;
+      }
+      acc['durations'][measure.name] += measure.duration;
+      acc['counts'][measure.name] += 1;
+      return acc;
+    }, { durations: {}, counts: {} });
+    fps = Math.round((allSortedMeasures['counts']['_frame time']*1000) / allSortedMeasures['durations']['_frame time'] *100)/100;
+    fpsSpan.innerHTML = `${fps} frame/sec`;
+  }
+
+  const fl = new flame();
+  let cycleCount = 0;
+  let then = Date.now();
+  let now;
   function cycle() {
-    drawDensity();
-    st = generateStaticFn();
-    p2 = perlin(0.12,boundaries);
+    performance.mark('cycle begin');
+    fl.draw(drawContext);
+    now = Date.now();
+    fl.tick(now - then);
+    then = now;
+    
+    // aorb += 0.04;
+    // if (aorb >= 1) {
+    //   aorb -= 1;
+    //   // st = generateStaticFn();
+    //   p1a = p1b;
+    //   p3a = p3b;
+    //   p1b = perlin(0.06,boundaries);
+    //   p3b = perlin(0.14,boundaries);
+    // }
+    // if (aorb % 3 === 0) st = generateStaticFn();
+    // p3 = perlin(0.14,boundaries);
+
+    performance.mark('cycle end');
+    performance.measure('_frame time', 'cycle begin', 'cycle end');
+    if (cycleCount % 30 === 0) printAndClearMeasures();
+
+    cycleCount += 1;
     requestAnimFrame(cycle);
   }
   cycle();
