@@ -3,11 +3,13 @@
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
   <canvas id="draw" style="cursor: move; border-radius: 1px; border-style: dotted;"></canvas>
+  <p><input type="range" min="0" max="100" value="50" class="slider" id="heatSlider"></p>
   <p><span id="fps-span"></span></p>
   
 <script>
   const canvas = document.querySelector('#draw');
   const fpsSpan = document.querySelector('#fps-span');
+  const heatSlider = document.querySelector('#heatSlider');
   const drawContext = canvas.getContext('2d');
   if (window.innerWidth >= 1200) {
     canvas.width = 1200;
@@ -106,28 +108,10 @@
     }
   }
 
-  // let pixelSize = 8;
-  // const nm = 32;
-  // const boundaries = function(x,y) {
-  //   if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
-  //   return false;
-  // }
-  // let p1a = perlin(0.06,boundaries);
-  // let p1b = perlin(0.06,boundaries);
-  // let p2 = perlin(0.14,boundaries);
-  // let p3a = perlin(0.14,boundaries);
-  // let p3b = perlin(0.14,boundaries);
-  // let st = generateStaticFn();
-  
-  // let aorb = 0;
-  // const pl = function(x,y) { return (aorb*p1b(x,y)) + ((1-aorb)*p1a(x,y)) + (0.8*p2(x,y))  + (0.3*st(x,y)) + (aorb*0.8*p3b(x,y)) + ((1-aorb)*0.8*p3a(x,y)); }
-  
-  const flame = function() {
+  const Flame = function() {
     this.pixelSize = 8;
     const nm = 32;
     this.boundaries = function(x,y) {
-      // console.log(this)
-      // throw 'r'
       if (x<=0 || x>=nm || y<=0 || y>=nm) return true;
       return false;
     }
@@ -137,16 +121,15 @@
     this.p3a = perlin(0.14,this.boundaries);
     this.p3b = perlin(0.14,this.boundaries);
     this.st = generateStaticFn();
-    // this.pl = function(x,y) { return (aorb*p1b(x,y)) + ((1-aorb)*p1a(x,y)) + (0.8*p2(x,y))  + (0.3*st(x,y)) + (aorb*0.8*p3b(x,y)) + ((1-aorb)*0.8*p3a(x,y)); }
-
-    this.draw = function(ctx) {
+    
+    this.draw = function(ctx, heat=0.5) {
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, nm*this.pixelSize, nm*this.pixelSize);
       for (let i=0; i<nm; i++) {
         for (let j=0; j<nm; j++) {
           const denX = (i+1)*this.pixelSize-this.pixelSize/2.0;
           const denY = (j+1)*this.pixelSize-this.pixelSize/2.0;
-          const denSize = clamp(this.pl(i,j), 0, 1);
+          const denSize = clamp(this.pl(i,j,heat), 0, 1);
           this.canvasShadedSquare(ctx, denX, denY, denSize);
         }
       }
@@ -163,9 +146,9 @@
 
     this.tick = function(tickMs) {
       
-      this.aorb += tickMs*0.005; //0.04;
+      this.aorb += tickMs*0.005;
       if (this.aorb >= 1) {
-        this.aorb -= 1;
+        this.aorb = this.aorb % 1;
         this.p1a = this.p1b;
         this.p3a = this.p3b;
         this.p1b = perlin(0.06,this.boundaries);
@@ -175,41 +158,20 @@
     }
 
     this.aorb = 0;
-    this.pl = function(x,y) { 
-      return (
+    this.pl = function(x,y,heat) { 
+      const prln = (
         this.aorb*this.p1b(x,y)) +
         ((1-this.aorb)*this.p1a(x,y)) +
         (0.8*this.p2(x,y)) +
         (0.3*this.st(x,y)) +
         (this.aorb*0.8*this.p3b(x,y)) +
         ((1-this.aorb)*0.8*this.p3a(x,y)
-      ); 
+      );
+      return (
+          (prln-1) / (0.5 + (heat*0.7))
+        )+1;
     }
   }
-
-  // function canvasShadedSquare(x, y, ss) {
-  //   if (ss === 0) {
-  //     return;
-  //   } else {
-  //     ctx.fillStyle = `rgba(255, ${interp(ss, 204, 32)}, 0, ${interp(ss, 250, 10)})`;
-  //   }
-  //   const atX = x-pixelSize/2.0;
-  //   const atY = y-pixelSize/2.0;
-  //   ctx.fillRect(atX, atY, pixelSize, pixelSize);
-  // }
-
-  // function drawDensity() {
-  //   ctx.fillStyle = 'white';
-  //   ctx.fillRect(0, 0, nm*pixelSize, nm*pixelSize);
-  //   for (let i=0; i<nm; i++) {
-  //     for (let j=0; j<nm; j++) {
-  //       const denX = (i+1)*pixelSize-pixelSize/2.0;
-  //       const denY = (j+1)*pixelSize-pixelSize/2.0;
-  //       const denSize = clamp(pl(i,j), 0, 1);
-  //       canvasShadedSquare(denX, denY, denSize);
-  //     }
-  //   }
-  // }
 
   function printAndClearMeasures() {
     const allEntries = performance.getEntriesByType("measure");
@@ -226,28 +188,16 @@
     fpsSpan.innerHTML = `${fps} frame/sec`;
   }
 
-  const fl = new flame();
+  const fl = new Flame();
   let cycleCount = 0;
   let then = Date.now();
   let now;
   function cycle() {
     performance.mark('cycle begin');
-    fl.draw(drawContext);
+    fl.draw(drawContext,heatSlider.value/100);
     now = Date.now();
     fl.tick(now - then);
     then = now;
-    
-    // aorb += 0.04;
-    // if (aorb >= 1) {
-    //   aorb -= 1;
-    //   // st = generateStaticFn();
-    //   p1a = p1b;
-    //   p3a = p3b;
-    //   p1b = perlin(0.06,boundaries);
-    //   p3b = perlin(0.14,boundaries);
-    // }
-    // if (aorb % 3 === 0) st = generateStaticFn();
-    // p3 = perlin(0.14,boundaries);
 
     performance.mark('cycle end');
     performance.measure('_frame time', 'cycle begin', 'cycle end');
