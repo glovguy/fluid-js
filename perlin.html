@@ -52,11 +52,14 @@
   }
 
   const fl = new Flame();
+  fl.y = 100;
   let cycleCount = 0;
   let then = Date.now();
   let now;
   function cycle() {
     performance.mark('cycle begin');
+    drawContext.fillStyle = 'white';
+    drawContext.fillRect(0, 0, canvas.width, canvas.height);
     fl.draw(drawContext,heatSlider.value/100);
     now = Date.now();
     fl.tick(now - then);

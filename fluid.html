@@ -9,7 +9,7 @@
     }}();
   </script>
 </head>
-<script src="perlin.js"></script>
+<!-- <script src="perlin.js"></script> -->
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
 <canvas id="draw" style="cursor: move;"></canvas>
@@ -302,9 +302,14 @@
 
   function drawParticles(particles) {
     particles.forEach(particle => {
-      if (particle['img'] !== undefined) {
-        const img = particle.img;
-        ctx.drawImage(img, particle.x-(img.width/2), particle.y-(img.height/2));
+      // if (particle['img'] !== undefined) {
+      //   const img = particle.img;
+      //   ctx.drawImage(img, particle.x-(img.width/2), particle.y-(img.height/2));
+      // } else
+      // console.log(particle, particle.draw)
+      if (particle.draw !== undefined) {
+        const heat = denState[Math.floor(particle.x/pixelSize)][Math.floor(particle.y/pixelSize)];
+        particle.draw(ctx, heat);
       } else {
         ctx.fillStyle = 'red';
         ctx.fillRect(particle.x, particle.y, 3, 3);
@@ -416,30 +421,37 @@
       return 0;
     },
     particles: function() {
-      return [];
+      return [new Flame()];
     },
     denSource: function(x,y) {
       if (
-        x >= Math.floor(arrWidth/2.0)-(arrWidth*0.1) &&
-          x <= Math.floor(arrWidth/2.0)+(arrWidth*0.1) &&
-          y >= arrHeight-(arrHeight*0.1)
+        // 590+60;
+        // this.y = 450;
+        x >= Math.floor(arrWidth/2.0)-3 &&
+          x <= Math.floor(arrWidth/2.0)+3 &&
+          y >= arrHeight-4
         ) { return 10; }
       return 0;
     },
     uSource: (x,y) => {
-      return -9;
+      // if (
+      //   x >= Math.floor(arrWidth/2.0)-3 &&
+      //     x <= Math.floor(arrWidth/2.0)+3 &&
+      //     y >= arrHeight-6
+      //   ) { return -900; }
+      return 0;
     },
     vSource: (x,y) => {
       if (
-        x >= Math.floor(arrWidth/2.0)-(arrWidth*0.1) &&
-          x <= Math.floor(arrWidth/2.0)+(arrWidth*0.1) &&
-          y >= arrHeight-(arrHeight*0.1)
+        x >= Math.floor(arrHeight/2.0)-3 &&
+          x <= Math.floor(arrHeight/2.0)+3 &&
+          y >= arrHeight-6
         ) { return -900; }
       return 0;
     },
     particlesSource: function() {
-      if (Math.random() > 0.1) { return []; }
-      return [{ x: 490+(137*Math.random()),  y: 455-(7*Math.random()),  xVel: -4*Math.random(), yVel: -15*Math.random(), decay: 70, gravity: -1 }];
+      // if (Math.random() > 0.5) { return []; }
+      return [new Flame()];
     }
   };
 
@@ -622,18 +634,29 @@
     project(Nx, Ny, uState, vState, uPrev, vPrev);
   }
 
+  let then;
+  let now = Date.now();
+
   function particles_evolve(particles, uState, vState) {
     particles.push(...template.particlesSource());
+    then = now;
+    now = Date.now();
+    const tDiff = now - then;
 
     const fluidDensity = 0.9;
     for (let i=0; i < particles.length; i++) {
       const particle = particles[i];
       const x = Math.round(particle.x / pixelSize);
       const y = Math.round(particle.y / pixelSize);
-      if (particle.decay == 0 || !(x > 0 && x < arrWidth-1 && y > 0 && y < arrHeight-1)) {
+      if (particle.decay <= 0 || !(x > 0 && x < arrWidth-1 && y > 0 && y < arrHeight-1)) {
         particles.splice(i, 1);
+        i -= 1;
         continue;
       }
+      if (particle.tick) {
+        particle.tick(tDiff);
+      }
+
       const impulseX = uState[x][y] - particle.xVel;
       const impulseY = vState[x][y] - particle.yVel;
       const pAccelerationX = fluidDensity*impulseX;
@@ -809,7 +832,7 @@
       performance.measure('drwCnvsImg putImageData', 'canvasImg putImageData start', 'after drawDensity');
       // performance.measure('drawDensity', 'after drawCanvas', 'after drawDensity');
       // performance.measure('drawVelocityArrows', 'after drawDensity', 'after drawVelocityArrows');
-      // performance.measure('drawParticles', 'after drawVelocityArrows', 'after drawParticles');
+      performance.measure('drawParticles', 'after drawVelocityArrows', 'after drawParticles');
       // performance.measure('misc', 'after drawParticles', 'final marker');
     } else {
       performance.measure('sim time', 'evolve begin', 'after evolve');
@@ -836,7 +859,7 @@
       '_fps_': `${fps} frame / sec`
     };
     Object.keys(allSortedMeasures['durations']).forEach(key => {
-      console.log(allSortedMeasures['durations'][key])
+      // console.log(allSortedMeasures['durations'][key])
       measuresForDisplay[key] = `${(allSortedMeasures['durations'][key] / allSortedMeasures['counts'][key]).toFixed(3)} ms`;
     });
     console.table(measuresForDisplay);
