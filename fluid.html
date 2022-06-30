@@ -10,6 +10,7 @@
   </script>
 </head>
 <!-- <script src="perlin.js"></script> -->
+<script src="config.js"></script>
 <body style="text-align:center; margin-left:auto; margin-right:auto;">
 
 <canvas id="draw" style="cursor: move;"></canvas>
@@ -136,6 +137,7 @@
   // View //
   //////////
 
+  const viewConfig = JSON.parse(viewConfigJson);
   const canvas = document.querySelector('#draw');
   const ctx = canvas.getContext('2d');
   if (window.innerWidth >= 1200) {
@@ -149,20 +151,18 @@
     canvas.height = window.innerHeight * 0.8;
   }
 
-  const pixelSize = 8;
+  const pixelSize = viewConfig.pixelSize;
   const arrWidth = Math.floor(canvas.width / pixelSize);
   const arrHeight = Math.floor(canvas.height / pixelSize);
   const Nx = arrWidth-2;
   const Ny = arrHeight-2;
   document.querySelector("#pixelCount").innerText = Nx*Ny;
 
-  let drawVelocity = false;
+  let drawVelocity = viewConfig.drawVelocity;
   const blurOffsetY = canvas.height + 1000;
 
-  let denDiffOptimize = true;
-  const diffReqLowRes = 0.02;
-  const diffReqHiRes = 0.001;
-  let denDiffReq = diffReqHiRes;
+  let denDiffOptimize = viewConfig.denDiffOptimize;
+  let denDiffReq = viewConfig.denDiffReq;
   const denDiffStored = initMatrix(arrWidth, arrHeight, () => 0);
   const Nn = Math.min(Nx, Ny)
   const refreshAnywayRate = Math.floor((Nn+1)/3);
@@ -321,11 +321,12 @@
   // Physics //
   /////////////
 
-  let dt = 0.002;
-  const visc = 20;
-  const diff = 20;
-  const denVelRatio = 0.45;
-  const gravity = 0.981
+  const physicsConfig = JSON.parse(physicsConfigJson);
+  let dt = physicsConfig.dt;
+  const visc = physicsConfig.visc;
+  const diff = physicsConfig.diff;
+  const denVelRatio = physicsConfig.denVelRatio;
+  const gravity = physicsConfig.gravity;
 
   const diffusionTest = {
     density: (x,y) => {
@@ -675,6 +676,28 @@
 
   let isMouseDown = false;
   let paused = false;
+  let lifeCycleTimeout;
+  let cycleCount = 0;
+
+  const controllerConfig = JSON.parse(controllerConfigJson);
+  let trackPerformance = controllerConfig.trackPerformance;
+  let granularPerformance = controllerConfig.granularPerformance;
+  let debug = controllerConfig.debug;
+
+  if (debug) {
+    document.querySelector('#debugDiv').style.display ='flex';
+  }
+
+  let advectStepSize = [];
+  if (trackPerformance) {
+    advectCallback = (i, i0, j, j0) => { advectStepSize.push(Math.max(i-i0, j-j0)); };
+  }
+  let measuresForDisplay = {};
+  let fps = 10;
+  let velTotal = 0;
+  let denTotal = 0;
+  let denMin = 0;
+  let denMax = 0;
 
   canvas.addEventListener('mousedown', clickFromUser);
   canvas.addEventListener('touchstart', touchFromUser);
@@ -755,26 +778,6 @@
     const tY = $event.targetTouches[0].clientY - canvasRect.y;
     if (!isMouseDown) { return; }
     addWindAt(tX,tY);
-  }
-
-  let lifeCycleTimeout;
-  let cycleCount = 0;
-  let trackPerformance = false;
-  let granularPerformance = false;
-  let advectStepSize = [];
-  if (trackPerformance) {
-    advectCallback = (i, i0, j, j0) => { advectStepSize.push(Math.max(i-i0, j-j0)); };
-  }
-  let measuresForDisplay = {};
-  let fps = 10;
-  let velTotal = 0;
-  let denTotal = 0;
-  let denMin = 0;
-  let denMax = 0;
-
-  let debug = false;
-  if (debug) {
-    document.querySelector('#debugDiv').style.display ='flex';
   }
 
   function evolve(denState, denPrev, denInput) {
